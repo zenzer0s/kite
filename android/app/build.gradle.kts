@@ -27,7 +27,8 @@ android {
         versionName = flutter.versionName
 
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+            abiFilters.clear()
+            abiFilters.add("arm64-v8a")
         }
     }
 
@@ -36,6 +37,22 @@ android {
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
+        }
+    }
+
+    packaging {
+        jniLibs {
+            keepDebugSymbols += setOf(
+                "**/libpython.zip.so",
+                "**/libffmpeg.zip.so",
+                "**/libaria2c.zip.so"
+            )
+            excludes += setOf(
+                "lib/x86/**",
+                "lib/x86_64/**",
+                "lib/armeabi/**",
+                "lib/armeabi-v7a/**"
+            )
         }
     }
 }
@@ -48,6 +65,7 @@ tasks.register<Exec>("uploadToTelegram") {
     group = "upload"
     description = "Uploads the release APK to Telegram."
     commandLine("python3", "${project.projectDir}/../upload_to_telegram.py")
+    isIgnoreExitValue = true
 }
 
 afterEvaluate {
@@ -56,4 +74,8 @@ afterEvaluate {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+
+    implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
+    implementation("io.github.junkfood02.youtubedl-android:ffmpeg:0.18.1")
+    implementation("io.github.junkfood02.youtubedl-android:aria2c:0.18.1")
 }

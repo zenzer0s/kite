@@ -1,5 +1,270 @@
 package com.zenzer0s.kite
 
+import android.content.Context
+import android.os.Environment
+import android.os.SystemClock
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodChannel
+import com.yausername.youtubedl_android.YoutubeDL
+import com.yausername.youtubedl_android.YoutubeDLRequest
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.util.concurrent.CancellationException
 
-class MainActivity : FlutterActivity()
+class MainActivity : FlutterActivity() {
+
+    companion object {
+        const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
+        const val EVENT_CHANNEL = "com.zenzer0s.kite/progress"
+        private const val PREFS_NAME = "kite_ytdlp"
+        private const val PREF_VERSION_KEY = "yt_dlp_version"
+        private const val DOWNLOAD_PROGRESS_INTERVAL_MS = 200L
+        private const val CONCURRENT_FRAGMENTS = "8"
+    }
+
+    private val scope = CoroutineScope(Dispatchers.Main + Job())
+    private val activeJobs = mutableMapOf<String, Job>()
+    private val canceledTaskIds = mutableSetOf<String>()
+    private var progressSink: EventChannel.EventSink? = null
+    private val initMutex = Mutex()
+    private var ytDlpReady = false
+    private val ytDlpPrefs by lazy {
+        applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun storeYtDlpVersion(version: String?) {
+        if (!version.isNullOrBlank()) {
+            ytDlpPrefs.edit().putString(PREF_VERSION_KEY, version).apply()
+        }
+    }
+
+    private fun getStoredYtDlpVersion(): String? {
+        return ytDlpPrefs.getString(PREF_VERSION_KEY, null)
+    }
+
+    private suspend fun ensureInit() {
+        initMutex.withLock {
+            if (ytDlpReady) return
+            val startedAt = SystemClock.elapsedRealtime()
+            Log.d("KiteMain", "ensureInit: awaiting native warmup...")
+            KiteApp.awaitNativeToolsReady().getOrThrow()
+            storeYtDlpVersion(YoutubeDL.getInstance().version(application.applicationContext))
+            ytDlpReady = true
+            Log.d("KiteMain", "ensureInit: done in ${SystemClock.elapsedRealtime() - startedAt}ms")
+        }
+    }
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                    progressSink = sink
+                }
+                override fun onCancel(arguments: Any?) {
+                    progressSink = null
+                }
+            })
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "fetchInfo" -> {
+                        val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
+                        Log.d("KiteMain", "fetchInfo called url=$url")
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { ensureInit() }
+                                Log.d("KiteMain", "fetchInfo: ready, fetching")
+                                val startedAt = SystemClock.elapsedRealtime()
+                                val info = withContext(Dispatchers.IO) {
+                                    val requestStartedAt = SystemClock.elapsedRealtime()
+                                    val req = YoutubeDLRequest(url).apply {
+                                        addOption("--dump-single-json")
+                                        addOption("--no-playlist")
+                                        addOption("-R", "1")
+                                        addOption("--socket-timeout", "5")
+                                        addOption("-o", "%(title).200B")
+                                    }
+                                    val requestBuiltAt = SystemClock.elapsedRealtime()
+                                    Log.d("KiteMain", "fetchInfo: request built in ${requestBuiltAt - requestStartedAt}ms")
+                                    val executeStartedAt = SystemClock.elapsedRealtime()
+                                    val response = YoutubeDL.getInstance().execute(req)
+                                    val executeFinishedAt = SystemClock.elapsedRealtime()
+                                    Log.d("KiteMain", "fetchInfo: yt-dlp execute finished in ${executeFinishedAt - executeStartedAt}ms")
+                                    val parsed = response.out.toVideoInfoMap()
+                                    Log.d("KiteMain", "fetchInfo: parse finished in ${SystemClock.elapsedRealtime() - executeFinishedAt}ms")
+                                    parsed
+                                }
+                                Log.d("KiteMain", "fetchInfo: completed in ${SystemClock.elapsedRealtime() - startedAt}ms title=${info["title"]}")
+                                result.success(info)
+                            } catch (e: Exception) {
+                                Log.e("KiteMain", "fetchInfo FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                                result.error("FETCH_ERROR", e.message, null)
+                            }
+                        }
+                    }
+
+                    "startDownload" -> {
+                        val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
+                        val audioOnly = call.argument<Boolean>("audioOnly") ?: false
+                        val outputDir = call.argument<String>("outputDir")
+                            ?: File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kite").absolutePath
+
+                        File(outputDir).mkdirs()
+
+                        val taskId = System.currentTimeMillis().toString()
+                        Log.d("KiteMain", "startDownload taskId=$taskId audioOnly=$audioOnly url=$url")
+                        val job = scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { ensureInit() }
+                                Log.d("KiteMain", "startDownload: ready, executing")
+                                withContext(Dispatchers.IO) {
+                                    val downloadStartedAt = SystemClock.elapsedRealtime()
+                                    val requestStartedAt = SystemClock.elapsedRealtime()
+                                    val req = YoutubeDLRequest(url).apply {
+                                        addOption("-o", "$outputDir/%(title)s.%(ext)s")
+                                        addOption("--no-playlist")
+                                        addOption("-R", "1")
+                                        addOption("--socket-timeout", "5")
+                                        addOption("--concurrent-fragments", CONCURRENT_FRAGMENTS)
+                                        if (audioOnly) {
+                                            addOption("-x")
+                                            addOption("--audio-format", "mp3")
+                                        } else {
+                                            addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+                                        }
+                                    }
+                                    val requestBuiltAt = SystemClock.elapsedRealtime()
+                                    Log.d("KiteMain", "startDownload: request built in ${requestBuiltAt - requestStartedAt}ms")
+                                    var callbackCount = 0
+                                    var emittedCount = 0
+                                    var lastProgress = Double.NEGATIVE_INFINITY
+                                    var lastLine = ""
+                                    var lastEmitAt = 0L
+                                    YoutubeDL.getInstance().execute(req, taskId) { progress, _, line ->
+                                        callbackCount += 1
+                                        val now = SystemClock.elapsedRealtime()
+                                        val progressValue = progress.toDouble()
+                                        val shouldEmit =
+                                            emittedCount == 0 ||
+                                                progressValue >= 100.0 ||
+                                                progressValue - lastProgress >= 1.0 ||
+                                                line != lastLine ||
+                                                now - lastEmitAt >= DOWNLOAD_PROGRESS_INTERVAL_MS
+                                        if (shouldEmit) {
+                                            emittedCount += 1
+                                            lastEmitAt = now
+                                            lastProgress = progressValue
+                                            lastLine = line
+                                            scope.launch {
+                                                progressSink?.success(mapOf(
+                                                    "taskId" to taskId,
+                                                    "progress" to progressValue,
+                                                    "line" to line,
+                                                ))
+                                            }
+                                        }
+                                    }
+                                    Log.d(
+                                        "KiteMain",
+                                        "startDownload: yt-dlp execute finished in ${SystemClock.elapsedRealtime() - requestBuiltAt}ms callbacks=$callbackCount emitted=$emittedCount total=${SystemClock.elapsedRealtime() - downloadStartedAt}ms"
+                                    )
+                                }
+                                if (!canceledTaskIds.contains(taskId)) {
+                                    progressSink?.success(mapOf("taskId" to taskId, "progress" to 100.0, "done" to true))
+                                }
+                            } catch (e: CancellationException) {
+                                Log.d("KiteMain", "startDownload: canceled taskId=$taskId")
+                            } catch (e: Exception) {
+                                if (canceledTaskIds.contains(taskId)) {
+                                    Log.d("KiteMain", "startDownload: canceled during execute taskId=$taskId message=${e.message}")
+                                } else {
+                                    progressSink?.success(mapOf("taskId" to taskId, "error" to (e.message ?: "Download failed")))
+                                }
+                            } finally {
+                                activeJobs.remove(taskId)
+                                canceledTaskIds.remove(taskId)
+                            }
+                        }
+                        activeJobs[taskId] = job
+                        result.success(taskId)
+                    }
+
+                    "cancelDownload" -> {
+                        val taskId = call.argument<String>("taskId") ?: return@setMethodCallHandler result.error("INVALID", "taskId required", null)
+                        try {
+                            canceledTaskIds.add(taskId)
+                            activeJobs[taskId]?.cancel(CancellationException("task canceled"))
+                            YoutubeDL.getInstance().destroyProcessById(taskId)
+                            activeJobs.remove(taskId)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            canceledTaskIds.remove(taskId)
+                            result.error("CANCEL_ERROR", e.message, null)
+                        }
+                    }
+
+                    "updateYtDlp" -> {
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { ensureInit() }
+                                val status = withContext(Dispatchers.IO) {
+                                    YoutubeDL.getInstance().updateYoutubeDL(application, YoutubeDL.UpdateChannel.STABLE)
+                                }
+                                storeYtDlpVersion(
+                                    withContext(Dispatchers.IO) {
+                                        YoutubeDL.getInstance().version(application.applicationContext)
+                                    }
+                                )
+                                result.success(status?.name ?: "ALREADY_UP_TO_DATE")
+                            } catch (e: Exception) {
+                                result.error("UPDATE_ERROR", e.message, null)
+                            }
+                        }
+                    }
+
+                    "getYtDlpVersion" -> {
+                        scope.launch {
+                            try {
+                                withContext(Dispatchers.IO) { ensureInit() }
+                                val version = withContext(Dispatchers.IO) {
+                                    YoutubeDL.getInstance().version(application.applicationContext)
+                                        ?: getStoredYtDlpVersion()
+                                }
+                                result.success(version)
+                            } catch (e: Exception) {
+                                result.error("VERSION_ERROR", e.message, null)
+                            }
+                        }
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun String.toVideoInfoMap(): Map<String, Any?> {
+        val json = JSONObject(this)
+        return mapOf(
+            "id" to json.optString("id"),
+            "title" to json.optString("title"),
+            "uploader" to json.optString("uploader"),
+            "thumbnail" to json.optString("thumbnail"),
+            "duration" to if (json.has("duration") && !json.isNull("duration")) json.optInt("duration") else null,
+            "webpage_url" to json.optString("webpage_url"),
+            "ext" to json.optString("ext"),
+        )
+    }
+}

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/ytdlp_provider.dart';
 import '../../theme/app_theme.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -12,7 +13,13 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final zc = context.zc;
     final themeMode = ref.watch(themeProvider);
+    final ytdlp = ref.watch(ytdlpProvider);
     final isDark = themeMode == ThemeMode.dark;
+    final ytdlpSubtitle = ytdlp.isUpdating
+        ? 'Checking for updates...'
+        : ytdlp.lastStatus == null
+        ? ytdlp.version
+        : '${ytdlp.version} • ${ytdlp.lastStatus}';
 
     return Scaffold(
       backgroundColor: zc.bg,
@@ -55,8 +62,12 @@ class SettingsScreen extends ConsumerWidget {
                 children: [
                   _SettingsTile(
                     title: 'Dark Mode',
-                    subtitle: isDark ? 'Sleek & Professional' : 'Bright & Clear',
-                    icon: isDark ? Icons.nightlight_round : Icons.wb_sunny_rounded,
+                    subtitle: isDark
+                        ? 'Sleek & Professional'
+                        : 'Bright & Clear',
+                    icon: isDark
+                        ? Icons.nightlight_round
+                        : Icons.wb_sunny_rounded,
                     zc: zc,
                     trailing: _KiteToggle(
                       value: isDark,
@@ -79,7 +90,10 @@ class SettingsScreen extends ConsumerWidget {
                     subtitle: '/storage/emulated/0/Download',
                     icon: Icons.folder_rounded,
                     zc: zc,
-                    trailing: Icon(Icons.chevron_right_rounded, color: zc.textDim),
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
+                      color: zc.textDim,
+                    ),
                     onTap: () {},
                   ),
                   _SettingsTile(
@@ -87,7 +101,10 @@ class SettingsScreen extends ConsumerWidget {
                     subtitle: 'Best quality (auto)',
                     icon: Icons.high_quality_rounded,
                     zc: zc,
-                    trailing: Icon(Icons.chevron_right_rounded, color: zc.textDim),
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
+                      color: zc.textDim,
+                    ),
                     onTap: () {},
                   ),
                   _SettingsTile(
@@ -95,7 +112,10 @@ class SettingsScreen extends ConsumerWidget {
                     subtitle: '3 simultaneous',
                     icon: Icons.download_for_offline_rounded,
                     zc: zc,
-                    trailing: Icon(Icons.chevron_right_rounded, color: zc.textDim),
+                    trailing: Icon(
+                      Icons.chevron_right_rounded,
+                      color: zc.textDim,
+                    ),
                     onTap: () {},
                   ),
                 ],
@@ -112,10 +132,31 @@ class SettingsScreen extends ConsumerWidget {
                     zc: zc,
                   ),
                   _SettingsTile(
+                    title: 'Auto-update yt-dlp',
+                    subtitle: 'Check for updates in background',
+                    icon: Icons.update_rounded,
+                    zc: zc,
+                    trailing: _KiteToggle(
+                      value: ytdlp.autoUpdate,
+                      onChanged: (val) {
+                        HapticFeedback.lightImpact();
+                        ref.read(ytdlpProvider.notifier).toggleAutoUpdate(val);
+                      },
+                      zc: zc,
+                    ),
+                  ),
+                  _SettingsTile(
                     title: 'yt-dlp Version',
-                    subtitle: 'Checking...',
+                    subtitle: ytdlpSubtitle,
                     icon: Icons.terminal_rounded,
                     zc: zc,
+                    trailing: Icon(Icons.refresh_rounded, color: zc.textDim),
+                    onTap: () {
+                      if (!ytdlp.isUpdating) {
+                        HapticFeedback.lightImpact();
+                        ref.read(ytdlpProvider.notifier).update();
+                      }
+                    },
                   ),
                 ],
               ),
@@ -131,7 +172,11 @@ class _SettingsGroup extends StatelessWidget {
   final String title;
   final ZenithColors zc;
   final List<Widget> children;
-  const _SettingsGroup({required this.title, required this.zc, required this.children});
+  const _SettingsGroup({
+    required this.title,
+    required this.zc,
+    required this.children,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -160,13 +205,15 @@ class _SettingsGroup extends StatelessWidget {
             children: children
                 .asMap()
                 .entries
-                .map((e) => Column(
-                      children: [
-                        e.value,
-                        if (e.key < children.length - 1)
-                          Divider(height: 1, color: zc.border, indent: 52),
-                      ],
-                    ))
+                .map(
+                  (e) => Column(
+                    children: [
+                      e.value,
+                      if (e.key < children.length - 1)
+                        Divider(height: 1, color: zc.border, indent: 52),
+                    ],
+                  ),
+                )
                 .toList(),
           ),
         ),
@@ -245,7 +292,11 @@ class _KiteToggle extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
   final ZenithColors zc;
-  const _KiteToggle({required this.value, required this.onChanged, required this.zc});
+  const _KiteToggle({
+    required this.value,
+    required this.onChanged,
+    required this.zc,
+  });
 
   @override
   Widget build(BuildContext context) {
