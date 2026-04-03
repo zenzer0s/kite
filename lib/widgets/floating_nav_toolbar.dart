@@ -27,11 +27,7 @@ class FloatingNavToolbar extends StatelessWidget {
     // Optional toggle for displaying download action
     final showDownload = onDownload != null;
 
-    final isAnyTabSelected = [
-      '/queue',
-      '/downloads',
-      '/settings',
-    ].contains(currentRoute);
+    final isAnyTabSelected = ['/queue', '/downloads'].contains(currentRoute);
     final spacing = isAnyTabSelected ? 1.0 : 8.0;
 
     return Padding(
@@ -80,16 +76,6 @@ class FloatingNavToolbar extends StatelessWidget {
                   onPrimary: onPrimaryColor,
                   onPrimaryContainer: onContainerColor,
                   onClick: () => onNavigate('/downloads'),
-                ),
-                SizedBox(width: spacing),
-                _NavToolbarItem(
-                  label: 'Settings',
-                  icon: Icons.settings_rounded,
-                  selected: currentRoute == '/settings',
-                  primary: primaryColor,
-                  onPrimary: onPrimaryColor,
-                  onPrimaryContainer: onContainerColor,
-                  onClick: () => onNavigate('/settings'),
                 ),
                 const SizedBox(width: 8),
               ],
@@ -171,7 +157,6 @@ class _NavToolbarItem extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
           onTap: () {
-            HapticFeedback.selectionClick();
             onClick();
           },
           child: Padding(

@@ -1,7 +1,9 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../providers/settings_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/ytdlp_provider.dart';
 
@@ -13,12 +15,24 @@ class SettingsScreen extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final themeMode = ref.watch(themeProvider);
     final ytdlp = ref.watch(ytdlpProvider);
+    final settings = ref.watch(settingsProvider);
     final isDark = themeMode == ThemeMode.dark;
     final ytdlpSubtitle = ytdlp.isUpdating
         ? 'Checking for updates...'
         : ytdlp.lastStatus == null
         ? ytdlp.version
         : '${ytdlp.version} · ${ytdlp.lastStatus}';
+
+    String formatLabel(DefaultFormat f) {
+      switch (f) {
+        case DefaultFormat.auto:
+          return 'Best quality (auto)';
+        case DefaultFormat.videoOnly:
+          return 'Video only';
+        case DefaultFormat.audioOnly:
+          return 'Audio only (MP3)';
+      }
+    }
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -67,36 +81,42 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 _SettingsTile(
                   title: 'Download Directory',
-                  subtitle: '/storage/emulated/0/Download',
+                  subtitle: settings.downloadDir,
                   icon: Icons.folder_rounded,
                   cs: cs,
                   trailing: Icon(
                     Icons.chevron_right_rounded,
                     color: cs.outline,
                   ),
-                  onTap: () {},
+                  onTap: () =>
+                      _pickDirectory(context, ref, settings.downloadDir),
                 ),
                 _SettingsTile(
                   title: 'Default Format',
-                  subtitle: 'Best quality (auto)',
+                  subtitle: formatLabel(settings.defaultFormat),
                   icon: Icons.high_quality_rounded,
                   cs: cs,
                   trailing: Icon(
                     Icons.chevron_right_rounded,
                     color: cs.outline,
                   ),
-                  onTap: () {},
+                  onTap: () =>
+                      _pickFormat(context, ref, settings.defaultFormat),
                 ),
                 _SettingsTile(
                   title: 'Concurrent Downloads',
-                  subtitle: '3 simultaneous',
+                  subtitle: '${settings.concurrentDownloads} simultaneous',
                   icon: Icons.download_for_offline_rounded,
                   cs: cs,
                   trailing: Icon(
                     Icons.chevron_right_rounded,
                     color: cs.outline,
                   ),
-                  onTap: () {},
+                  onTap: () => _pickConcurrent(
+                    context,
+                    ref,
+                    settings.concurrentDownloads,
+                  ),
                 ),
               ],
             ),
@@ -142,6 +162,184 @@ class SettingsScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _pickDirectory(
+    BuildContext context,
+    WidgetRef ref,
+    String current,
+  ) async {
+    final path = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Select Download Folder',
+      initialDirectory: current,
+    );
+    if (path != null) {
+      ref.read(settingsProvider.notifier).setDownloadDir(path);
+    }
+  }
+
+  Future<void> _pickFormat(
+    BuildContext context,
+    WidgetRef ref,
+    DefaultFormat current,
+  ) async {
+    final cs = Theme.of(context).colorScheme;
+    final options = [
+      (DefaultFormat.auto, 'Best quality (auto)', Icons.auto_awesome_rounded),
+      (DefaultFormat.videoOnly, 'Video only', Icons.videocam_rounded),
+      (DefaultFormat.audioOnly, 'Audio only (MP3)', Icons.audio_file_rounded),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: cs.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Default Format',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ...options.map((opt) {
+                  final (format, label, icon) = opt;
+                  final selected = format == current;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ref
+                          .read(settingsProvider.notifier)
+                          .setDefaultFormat(format);
+                      Navigator.pop(ctx);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 12,
+                        horizontal: 4,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            icon,
+                            color: selected ? cs.primary : cs.outline,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
+                              label,
+                              style: GoogleFonts.outfit(
+                                fontSize: 14,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: selected ? cs.primary : cs.onSurface,
+                              ),
+                            ),
+                          ),
+                          if (selected)
+                            Icon(
+                              Icons.check_rounded,
+                              color: cs.primary,
+                              size: 18,
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickConcurrent(
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) async {
+    final cs = Theme.of(context).colorScheme;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: cs.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Concurrent Downloads',
+                  style: GoogleFonts.outfit(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: List.generate(5, (i) {
+                    final n = i + 1;
+                    final selected = n == current;
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        ref
+                            .read(settingsProvider.notifier)
+                            .setConcurrentDownloads(n);
+                        Navigator.pop(ctx);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? cs.primary
+                              : cs.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '$n',
+                          style: GoogleFonts.outfit(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: selected ? cs.onPrimary : cs.onSurface,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -1,6 +1,7 @@
 package com.zenzer0s.kite
 
 import android.content.Context
+import android.content.Intent
 import android.os.Environment
 import android.os.SystemClock
 import android.system.Os
@@ -31,6 +32,7 @@ class MainActivity : FlutterFragmentActivity() {
     companion object {
         const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
         const val EVENT_CHANNEL = "com.zenzer0s.kite/progress"
+        const val SHARE_CHANNEL = "com.zenzer0s.kite/share"
         private const val PREFS_NAME = "kite_ytdlp"
         private const val PREF_VERSION_KEY = "yt_dlp_version"
         private const val DOWNLOAD_PROGRESS_INTERVAL_MS = 200L
@@ -42,6 +44,8 @@ class MainActivity : FlutterFragmentActivity() {
     private val canceledTaskIds = mutableSetOf<String>()
     private val pausedTaskIds = mutableSetOf<String>()
     private var progressSink: EventChannel.EventSink? = null
+    private var shareSink: EventChannel.EventSink? = null
+    private var pendingSharedUrl: String? = null
     private val initMutex = Mutex()
     private var ytDlpReady = false
     private val ytDlpPrefs by lazy {
@@ -112,6 +116,20 @@ class MainActivity : FlutterFragmentActivity() {
                 }
                 override fun onCancel(arguments: Any?) {
                     progressSink = null
+                }
+            })
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, SHARE_CHANNEL)
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                    shareSink = sink
+                    pendingSharedUrl?.let { url ->
+                        sink?.success(url)
+                        pendingSharedUrl = null
+                    }
+                }
+                override fun onCancel(arguments: Any?) {
+                    shareSink = null
                 }
             })
 
@@ -350,6 +368,38 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun extractSharedUrl(intent: Intent?): String? {
+        if (intent == null) return null
+        return when (intent.action) {
+            Intent.ACTION_SEND -> {
+                if (intent.type == "text/plain") intent.getStringExtra(Intent.EXTRA_TEXT) else null
+            }
+            Intent.ACTION_VIEW -> intent.dataString
+            else -> null
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val url = extractSharedUrl(intent) ?: return
+        if (shareSink != null) {
+            shareSink?.success(url)
+        } else {
+            pendingSharedUrl = url
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val url = extractSharedUrl(intent) ?: return
+        intent.action = null
+        if (shareSink != null) {
+            shareSink?.success(url)
+        } else {
+            pendingSharedUrl = url
+        }
     }
 
     private fun String.toVideoInfoMap(): Map<String, Any?> {

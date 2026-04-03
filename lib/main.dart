@@ -6,10 +6,11 @@ import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/downloads/downloads_screen.dart';
-import 'screens/settings/settings_screen.dart';
 import 'widgets/floating_nav_toolbar.dart';
 
-final navigationProvider = NotifierProvider<_NavNotifier, int>(_NavNotifier.new);
+final navigationProvider = NotifierProvider<_NavNotifier, int>(
+  _NavNotifier.new,
+);
 
 class _NavNotifier extends Notifier<int> {
   @override
@@ -70,11 +71,7 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
   late final PageController _pageController;
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    DownloadsScreen(),
-    SettingsScreen(),
-  ];
+  final List<Widget> _screens = const [HomeScreen(), DownloadsScreen()];
 
   @override
   void initState() {
@@ -103,7 +100,6 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
 
     String currentRoute = '/queue';
     if (_currentIndex == 1) currentRoute = '/downloads';
-    if (_currentIndex == 2) currentRoute = '/settings';
 
     return Scaffold(
       extendBody: true,
@@ -127,7 +123,6 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
               onNavigate: (route) {
                 int targetIndex = 0;
                 if (route == '/downloads') targetIndex = 1;
-                if (route == '/settings') targetIndex = 2;
 
                 if (_currentIndex != targetIndex) {
                   HapticFeedback.lightImpact();

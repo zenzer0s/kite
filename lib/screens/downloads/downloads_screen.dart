@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../database/app_database.dart';
 import '../../providers/database_provider.dart';
+import '../settings/settings_screen.dart';
 
 enum _Filter { all, video, audio }
 
@@ -36,19 +37,37 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  PhosphorIcon(
-                    PhosphorIcons.downloadSimple(PhosphorIconsStyle.fill),
-                    color: cs.primary,
-                    size: 24,
+                  Row(
+                    children: [
+                      PhosphorIcon(
+                        PhosphorIcons.downloadSimple(PhosphorIconsStyle.fill),
+                        color: cs.primary,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Downloads',
+                        style: GoogleFonts.outfit(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Downloads',
-                    style: GoogleFonts.outfit(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurface,
+                  IconButton(
+                    icon: Icon(Icons.settings_outlined, color: cs.onSurface),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const SettingsScreen(),
+                        ),
+                      );
+                    },
+                    style: IconButton.styleFrom(
+                      hoverColor: cs.surfaceContainerHighest,
                     ),
                   ),
                 ],
