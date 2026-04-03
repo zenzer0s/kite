@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/download_provider.dart';
 import '../../services/download_service.dart';
 
@@ -77,7 +78,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (context) => _MediaBottomSheet(onDownloadFormat: _startDownload),
+      builder: (context) => _MediaBottomSheet(onDownload: _startDownload),
     ).then((_) {
       setState(() {
         _isSheetOpen = false;
@@ -90,10 +91,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  void _startDownload(bool audioOnly) {
+  void _startDownload({required bool audioOnly, String? formatId}) {
     HapticFeedback.mediumImpact();
-    ref.read(downloadProvider.notifier).startDownload(audioOnly: audioOnly);
-    Navigator.of(context).pop(); // Close sheet
+    ref
+        .read(downloadProvider.notifier)
+        .startDownload(audioOnly: audioOnly, formatId: formatId);
+    Navigator.of(context).pop();
   }
 
   void _pasteFromClipboard() async {
@@ -327,9 +330,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 }
 
 class _MediaBottomSheet extends ConsumerWidget {
-  final Function(bool isAudioOnly) onDownloadFormat;
+  final void Function({required bool audioOnly, String? formatId}) onDownload;
 
-  const _MediaBottomSheet({required this.onDownloadFormat});
+  const _MediaBottomSheet({required this.onDownload});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -391,10 +394,7 @@ class _MediaBottomSheet extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
               child: isLoading
                   ? const _SkeletonState()
-                  : _DataState(
-                      info: dl.info!,
-                      onDownloadFormat: onDownloadFormat,
-                    ),
+                  : _DataState(info: dl.info!, onDownload: onDownload),
             ),
           ),
         ],
@@ -505,16 +505,79 @@ class _SkeletonStateState extends State<_SkeletonState>
 
 class _DataState extends StatelessWidget {
   final VideoInfo info;
-  final Function(bool) onDownloadFormat;
+  final void Function({required bool audioOnly, String? formatId}) onDownload;
 
-  const _DataState({required this.info, required this.onDownloadFormat});
+  const _DataState({required this.info, required this.onDownload});
+
+  static double _effectiveHeight(VideoFormat f) {
+    if ((f.height ?? 0) > 0) return f.height!;
+    final res = f.resolution ?? '';
+    final match = RegExp(r'x(\d+)$').firstMatch(res);
+    if (match != null) return double.tryParse(match.group(1)!) ?? 0;
+    final hMatch = RegExp(r'^(\d+)p').firstMatch(res);
+    if (hMatch != null) return double.tryParse(hMatch.group(1)!) ?? 0;
+    return 0;
+  }
+
+  List<VideoFormat> _videoFormats() {
+    final seen = <double>{};
+    final list =
+        info.formats
+            .where((f) => !f.isAudioOnly && _effectiveHeight(f) > 0)
+            .toList()
+          ..sort((a, b) => _effectiveHeight(b).compareTo(_effectiveHeight(a)));
+    list.retainWhere((f) => seen.add(_effectiveHeight(f)));
+    return list;
+  }
+
+  List<VideoFormat> _audioFormats() {
+    final sorted =
+        info.formats.where((f) => f.isAudioOnly && f.containsAudio).toList()
+          ..sort((a, b) => (b.abr ?? 0).compareTo(a.abr ?? 0));
+    return sorted.isEmpty ? [] : [sorted.first];
+  }
+
+  String _qualityLabel(VideoFormat f) {
+    final h = _effectiveHeight(f).toInt();
+    if (h >= 2160) return '4K Ultra HD';
+    if (h >= 1440) return '1440p QHD';
+    if (h >= 1080) return '1080p Full HD';
+    if (h >= 720) return '720p HD';
+    if (h >= 480) return '480p SD';
+    if (h >= 360) return '360p';
+    if (h > 0) return '${h}p';
+    return f.formatNote ?? f.resolution ?? 'Video';
+  }
+
+  String _videoSubtitle(VideoFormat f) {
+    final parts = <String>[];
+    final ext = f.ext?.toUpperCase();
+    if (ext != null && ext.isNotEmpty) parts.add(ext);
+    if (f.vbr != null && f.vbr! > 0) parts.add('${f.vbr!.toInt()}kbps');
+    final size = f.effectiveSize;
+    if (size > 0) parts.add(_formatFileSize(size));
+    return parts.isNotEmpty ? parts.join(' · ') : (f.formatNote ?? 'Video');
+  }
+
+  String _audioSubtitle(VideoFormat f) {
+    final parts = <String>[];
+    final ext = f.ext?.toUpperCase();
+    if (ext != null && ext.isNotEmpty) parts.add(ext);
+    if (f.abr != null && f.abr! > 0) parts.add('${f.abr!.toInt()}kbps');
+    final size = f.effectiveSize;
+    if (size > 0) parts.add(_formatFileSize(size));
+    return parts.isNotEmpty ? parts.join(' · ') : (f.formatNote ?? 'Audio');
+  }
 
   @override
   Widget build(BuildContext context) {
+    final videoFormats = _videoFormats();
+    final audioFormats = _audioFormats();
+    final hasRealFormats = videoFormats.isNotEmpty || audioFormats.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Media Card
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -599,65 +662,224 @@ class _DataState extends StatelessWidget {
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
 
-        // Video Section
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 12),
-          child: Text(
-            'Video Options',
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: _mdPrimary,
-              letterSpacing: 0.5,
-            ),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _ActionChip(
+                icon: Icons.copy_rounded,
+                label: 'Copy URL',
+                onTap: () {
+                  Clipboard.setData(ClipboardData(text: info.url));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('URL copied', style: GoogleFonts.outfit()),
+                      backgroundColor: _mdSurfaceContainerHighest,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _ActionChip(
+                icon: Icons.open_in_browser_rounded,
+                label: 'Open URL',
+                onTap: () => launchUrl(
+                  Uri.parse(info.url),
+                  mode: LaunchMode.externalApplication,
+                ),
+              ),
+              if (info.thumbnail.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                _ActionChip(
+                  icon: Icons.image_outlined,
+                  label: 'Thumbnail',
+                  onTap: () => launchUrl(
+                    Uri.parse(info.thumbnail),
+                    mode: LaunchMode.externalApplication,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
 
-        _FormatItem(
-          icon: Icons.videocam_rounded,
-          iconBg: _mdPrimaryContainer,
-          iconColor: _mdOnPrimaryContainer,
-          title: '1080p Full HD',
-          subtitle: 'MP4 • Includes Audio',
-          onTap: () => onDownloadFormat(false),
-        ),
-        const SizedBox(height: 8),
-        _FormatItem(
-          icon: Icons.videocam_outlined,
-          iconBg: _mdSurfaceContainerHighest,
-          iconColor: _mdOnBg,
-          title: '720p Standard',
-          subtitle: 'MP4 • Includes Audio',
-          onTap: () => onDownloadFormat(false),
-        ),
-
         const SizedBox(height: 24),
 
-        // Audio Section
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 12),
-          child: Text(
-            'Audio Only',
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: _mdSuccess,
-              letterSpacing: 0.5,
+        if (hasRealFormats) ...[
+          if (videoFormats.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 12),
+              child: Text(
+                'Video Options',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _mdPrimary,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            ...videoFormats.take(5).toList().asMap().entries.map((entry) {
+              final f = entry.value;
+              final isFirst = entry.key == 0;
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: entry.key < videoFormats.take(5).length - 1 ? 8 : 0,
+                ),
+                child: _FormatItem(
+                  icon: isFirst
+                      ? Icons.videocam_rounded
+                      : Icons.videocam_outlined,
+                  iconBg: isFirst
+                      ? _mdPrimaryContainer
+                      : _mdSurfaceContainerHighest,
+                  iconColor: isFirst ? _mdOnPrimaryContainer : _mdOnBg,
+                  title: _qualityLabel(f),
+                  subtitle: _videoSubtitle(f),
+                  onTap: () =>
+                      onDownload(audioOnly: false, formatId: f.formatId),
+                ),
+              );
+            }),
+            const SizedBox(height: 24),
+          ],
+          if (audioFormats.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 12),
+              child: Text(
+                'Audio Only',
+                style: GoogleFonts.outfit(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _mdSuccess,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+            ...audioFormats.map(
+              (f) => _FormatItem(
+                icon: Icons.music_note_rounded,
+                iconBg: _mdSuccessDark,
+                iconColor: _mdSuccess,
+                title: f.formatNote ?? 'Best Audio',
+                subtitle: _audioSubtitle(f),
+                onTap: () => onDownload(audioOnly: true, formatId: f.formatId),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ] else ...[
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Text(
+              'Video Options',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: _mdPrimary,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
-        ),
+          _FormatItem(
+            icon: Icons.videocam_rounded,
+            iconBg: _mdPrimaryContainer,
+            iconColor: _mdOnPrimaryContainer,
+            title: 'Best Video + Audio',
+            subtitle: 'MP4 • Best available quality',
+            onTap: () => onDownload(audioOnly: false),
+          ),
+          const SizedBox(height: 24),
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Text(
+              'Audio Only',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: _mdSuccess,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          _FormatItem(
+            icon: Icons.music_note_rounded,
+            iconBg: _mdSuccessDark,
+            iconColor: _mdSuccess,
+            title: 'Best Audio',
+            subtitle: 'MP3 Format',
+            onTap: () => onDownload(audioOnly: true),
+          ),
+          const SizedBox(height: 24),
+        ],
 
-        _FormatItem(
-          icon: Icons.music_note_rounded,
-          iconBg: _mdSuccessDark,
-          iconColor: _mdSuccess,
-          title: 'High Quality Audio',
-          subtitle: 'M4A / MP3 Format',
-          onTap: () => onDownloadFormat(true),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: _mdSurfaceContainer,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.link_rounded, color: _mdOutline, size: 18),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  info.url,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.outfit(fontSize: 12, color: _mdOutline),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: _mdSurfaceContainerHighest,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: _mdOnBg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: GoogleFonts.outfit(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: _mdOnBg,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -731,4 +953,12 @@ String _formatDuration(int seconds) {
   final m = seconds ~/ 60;
   final s = seconds % 60;
   return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+}
+
+String _formatFileSize(double bytes) {
+  if (bytes <= 0) return '';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)}KB';
+  if (bytes < 1024 * 1024 * 1024)
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)}GB';
 }

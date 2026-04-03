@@ -1,5 +1,55 @@
 import 'package:flutter/services.dart';
 
+class VideoFormat {
+  final String formatId;
+  final String? formatNote;
+  final String? ext;
+  final String? vcodec;
+  final String? acodec;
+  final double? width;
+  final double? height;
+  final String? resolution;
+  final double? vbr;
+  final double? abr;
+  final double? fileSize;
+  final double? fileSizeApprox;
+
+  const VideoFormat({
+    required this.formatId,
+    this.formatNote,
+    this.ext,
+    this.vcodec,
+    this.acodec,
+    this.width,
+    this.height,
+    this.resolution,
+    this.vbr,
+    this.abr,
+    this.fileSize,
+    this.fileSizeApprox,
+  });
+
+  bool get isAudioOnly => vcodec == null || vcodec == 'none';
+  bool get containsAudio => acodec != null && acodec != 'none';
+
+  double get effectiveSize => fileSize ?? fileSizeApprox ?? 0;
+
+  factory VideoFormat.fromMap(Map map) => VideoFormat(
+    formatId: map['format_id'] as String? ?? '',
+    formatNote: map['format_note'] as String?,
+    ext: map['ext'] as String?,
+    vcodec: map['vcodec'] as String?,
+    acodec: map['acodec'] as String?,
+    width: (map['width'] as num?)?.toDouble(),
+    height: (map['height'] as num?)?.toDouble(),
+    resolution: map['resolution'] as String?,
+    vbr: (map['vbr'] as num?)?.toDouble(),
+    abr: (map['abr'] as num?)?.toDouble(),
+    fileSize: (map['filesize'] as num?)?.toDouble(),
+    fileSizeApprox: (map['filesize_approx'] as num?)?.toDouble(),
+  );
+}
+
 class VideoInfo {
   final String id;
   final String title;
@@ -8,6 +58,7 @@ class VideoInfo {
   final int duration;
   final String url;
   final String ext;
+  final List<VideoFormat> formats;
 
   const VideoInfo({
     required this.id,
@@ -17,6 +68,7 @@ class VideoInfo {
     required this.duration,
     required this.url,
     required this.ext,
+    this.formats = const [],
   });
 
   factory VideoInfo.fromMap(Map map) => VideoInfo(
@@ -27,6 +79,12 @@ class VideoInfo {
     duration: (map['duration'] as num?)?.toInt() ?? 0,
     url: map['webpage_url'] ?? '',
     ext: map['ext'] ?? 'mp4',
+    formats:
+        ((map['formats'] as List?)
+            ?.cast<Map>()
+            .map(VideoFormat.fromMap)
+            .toList()) ??
+        [],
   );
 }
 
@@ -109,12 +167,14 @@ class DownloadService {
   static Future<String> startDownload({
     required String url,
     required bool audioOnly,
+    String? formatId,
     String? outputDir,
   }) async {
     final taskId = await _method.invokeMethod<String>('startDownload', {
       'url': url,
       'audioOnly': audioOnly,
-      'outputDir': ?outputDir,
+      if (formatId != null) 'formatId': formatId,
+      if (outputDir != null) 'outputDir': outputDir,
     });
     return taskId!;
   }

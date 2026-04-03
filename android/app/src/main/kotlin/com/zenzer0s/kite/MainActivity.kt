@@ -95,7 +95,7 @@ class MainActivity : FlutterActivity() {
                                         addOption("--no-playlist")
                                         addOption("-R", "1")
                                         addOption("--socket-timeout", "5")
-                                        addOption("-o", "%(title).200B")
+                                        addOption("--extractor-args", "youtube:player_skip=configs,js")
                                     }
                                     val requestBuiltAt = SystemClock.elapsedRealtime()
                                     Log.d("KiteMain", "fetchInfo: request built in ${requestBuiltAt - requestStartedAt}ms")
@@ -104,7 +104,7 @@ class MainActivity : FlutterActivity() {
                                     val executeFinishedAt = SystemClock.elapsedRealtime()
                                     Log.d("KiteMain", "fetchInfo: yt-dlp execute finished in ${executeFinishedAt - executeStartedAt}ms")
                                     val parsed = response.out.toVideoInfoMap()
-                                    Log.d("KiteMain", "fetchInfo: parse finished in ${SystemClock.elapsedRealtime() - executeFinishedAt}ms")
+                                    Log.d("KiteMain", "fetchInfo: formats=${(parsed["formats"] as? List<*>)?.size ?: 0} parse finished in ${SystemClock.elapsedRealtime() - executeFinishedAt}ms")
                                     parsed
                                 }
                                 Log.d("KiteMain", "fetchInfo: completed in ${SystemClock.elapsedRealtime() - startedAt}ms title=${info["title"]}")
@@ -119,13 +119,14 @@ class MainActivity : FlutterActivity() {
                     "startDownload" -> {
                         val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
                         val audioOnly = call.argument<Boolean>("audioOnly") ?: false
+                        val formatId = call.argument<String>("formatId")
                         val outputDir = call.argument<String>("outputDir")
                             ?: File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kite").absolutePath
 
                         File(outputDir).mkdirs()
 
                         val taskId = System.currentTimeMillis().toString()
-                        Log.d("KiteMain", "startDownload taskId=$taskId audioOnly=$audioOnly url=$url")
+                        Log.d("KiteMain", "startDownload taskId=$taskId audioOnly=$audioOnly formatId=$formatId url=$url")
                         val job = scope.launch {
                             try {
                                 withContext(Dispatchers.IO) { ensureInit() }
@@ -139,11 +140,13 @@ class MainActivity : FlutterActivity() {
                                         addOption("-R", "1")
                                         addOption("--socket-timeout", "5")
                                         addOption("--concurrent-fragments", CONCURRENT_FRAGMENTS)
-                                        if (audioOnly) {
-                                            addOption("-x")
-                                            addOption("--audio-format", "mp3")
-                                        } else {
-                                            addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+                                        when {
+                                            audioOnly -> {
+                                                addOption("-x")
+                                                addOption("--audio-format", "mp3")
+                                            }
+                                            formatId != null -> addOption("-f", formatId)
+                                            else -> addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
                                         }
                                     }
                                     val requestBuiltAt = SystemClock.elapsedRealtime()
@@ -257,6 +260,26 @@ class MainActivity : FlutterActivity() {
 
     private fun String.toVideoInfoMap(): Map<String, Any?> {
         val json = JSONObject(this)
+        val formatsArray = json.optJSONArray("formats")
+        val formats: List<Map<String, Any?>> = if (formatsArray != null) {
+            (0 until formatsArray.length()).map { i ->
+                val f = formatsArray.getJSONObject(i)
+                mapOf(
+                    "format_id" to f.optString("format_id"),
+                    "format_note" to f.optString("format_note").takeIf { it.isNotEmpty() },
+                    "ext" to f.optString("ext").takeIf { it.isNotEmpty() },
+                    "vcodec" to f.optString("vcodec").takeIf { it.isNotEmpty() },
+                    "acodec" to f.optString("acodec").takeIf { it.isNotEmpty() },
+                    "width" to if (!f.isNull("width")) f.optDouble("width") else null,
+                    "height" to if (!f.isNull("height")) f.optDouble("height") else null,
+                    "resolution" to f.optString("resolution").takeIf { it.isNotEmpty() },
+                    "vbr" to if (!f.isNull("vbr")) f.optDouble("vbr") else null,
+                    "abr" to if (!f.isNull("abr")) f.optDouble("abr") else null,
+                    "filesize" to if (!f.isNull("filesize")) f.optLong("filesize").toDouble() else null,
+                    "filesize_approx" to if (!f.isNull("filesize_approx")) f.optLong("filesize_approx").toDouble() else null,
+                )
+            }
+        } else emptyList()
         return mapOf(
             "id" to json.optString("id"),
             "title" to json.optString("title"),
@@ -265,6 +288,7 @@ class MainActivity : FlutterActivity() {
             "duration" to if (json.has("duration") && !json.isNull("duration")) json.optInt("duration") else null,
             "webpage_url" to json.optString("webpage_url"),
             "ext" to json.optString("ext"),
+            "formats" to formats,
         )
     }
 }

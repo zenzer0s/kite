@@ -96,7 +96,10 @@ class DownloadNotifier extends Notifier<DownloadState> {
     }
   }
 
-  Future<void> startDownload({required bool audioOnly}) async {
+  Future<void> startDownload({
+    required bool audioOnly,
+    String? formatId,
+  }) async {
     final info = state.info;
     if (info == null) return;
     state = state.copyWith(status: DownloadStatus.downloading, progress: 0);
@@ -104,6 +107,7 @@ class DownloadNotifier extends Notifier<DownloadState> {
       final taskId = await DownloadService.startDownload(
         url: info.url,
         audioOnly: audioOnly,
+        formatId: formatId,
       );
       state = state.copyWith(
         activeTaskId: taskId,
