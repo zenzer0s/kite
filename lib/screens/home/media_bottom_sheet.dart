@@ -16,42 +16,103 @@ class MediaBottomSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dl = ref.watch(downloadProvider);
     final isLoading = dl.status == DownloadStatus.fetching || dl.info == null;
+    final animation =
+        ModalRoute.of(context)?.animation ?? kAlwaysCompleteAnimation;
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.9,
-      ),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag Handle
-          const SizedBox(height: 16),
-          Container(
-            width: 32,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.outline.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(2),
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 0.08),
+              end: Offset.zero,
+            ).animate(curved),
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.95, end: 1.0).animate(curved),
+              alignment: Alignment.bottomCenter,
+              child: child,
             ),
           ),
-          const SizedBox(height: 20),
-
-          // Content Box
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-              child: isLoading
-                  ? const _ContainedLoadingIndicator()
-                  : _DataState(info: dl.info!, onDownload: onDownload),
+        );
+      },
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 16),
+            Container(
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 20),
+            Flexible(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 380),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeIn,
+                transitionBuilder: (child, anim) {
+                  return FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position:
+                          Tween<Offset>(
+                            begin: const Offset(0, 0.06),
+                            end: Offset.zero,
+                          ).animate(
+                            CurvedAnimation(
+                              parent: anim,
+                              curve: Curves.easeOutCubic,
+                            ),
+                          ),
+                      child: ScaleTransition(
+                        scale: Tween<double>(begin: 0.96, end: 1.0).animate(
+                          CurvedAnimation(
+                            parent: anim,
+                            curve: Curves.easeOutCubic,
+                          ),
+                        ),
+                        alignment: Alignment.topCenter,
+                        child: child,
+                      ),
+                    ),
+                  );
+                },
+                child: isLoading
+                    ? const KeyedSubtree(
+                        key: ValueKey('loading'),
+                        child: _ContainedLoadingIndicator(),
+                      )
+                    : SingleChildScrollView(
+                        key: const ValueKey('data'),
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                        child: _DataState(
+                          info: dl.info!,
+                          onDownload: onDownload,
+                        ),
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

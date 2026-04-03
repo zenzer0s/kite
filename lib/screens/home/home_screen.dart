@@ -14,17 +14,23 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with SingleTickerProviderStateMixin {
   static const _shareChannel = EventChannel('com.zenzer0s.kite/share');
 
   final TextEditingController _urlController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   bool _isInputFilled = false;
   bool _isSheetOpen = false;
+  late final AnimationController _sheetCtrl;
 
   @override
   void initState() {
     super.initState();
+    _sheetCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
     _urlController.addListener(() {
       setState(() {
         _isInputFilled = _urlController.text.trim().isNotEmpty;
@@ -42,6 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    _sheetCtrl.dispose();
     _urlController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -68,6 +75,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
+      transitionAnimationController: _sheetCtrl,
       builder: (context) => MediaBottomSheet(onDownload: _startDownload),
     ).then((_) {
       setState(() {
