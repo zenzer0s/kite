@@ -173,8 +173,8 @@ class DownloadService {
     final taskId = await _method.invokeMethod<String>('startDownload', {
       'url': url,
       'audioOnly': audioOnly,
-      if (formatId != null) 'formatId': formatId,
-      if (outputDir != null) 'outputDir': outputDir,
+      'formatId': ?formatId,
+      'outputDir': ?outputDir,
     });
     return taskId!;
   }
