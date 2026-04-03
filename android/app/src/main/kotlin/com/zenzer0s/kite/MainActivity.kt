@@ -366,6 +366,10 @@ open class MainActivity : FlutterFragmentActivity() {
                     }
 
                     "minimize" -> {
+                        window.addFlags(
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        )
                         moveTaskToBack(true)
                         result.success(true)
                     }

@@ -84,6 +84,7 @@ class _ShareHandlerScreenState extends ConsumerState<ShareHandlerScreen> {
       setState(() => _isGhosting = true);
     }
     const platform = MethodChannel('com.zenzer0s.kite/downloader');
+    platform.invokeMethod('minimize');
     platform.invokeMethod('makeUntouchable');
   }
 
