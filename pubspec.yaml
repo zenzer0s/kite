@@ -41,6 +41,7 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
   phosphor_flutter: ^2.1.0
+  dynamic_color: ^1.8.1
 
 dev_dependencies:
   flutter_test:

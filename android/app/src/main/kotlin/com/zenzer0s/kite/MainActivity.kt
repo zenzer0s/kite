@@ -4,7 +4,7 @@ import android.content.Context
 import android.os.Environment
 import android.os.SystemClock
 import android.util.Log
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -21,7 +21,10 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.CancellationException
 
-class MainActivity : FlutterActivity() {
+import com.zenzer0s.kite.expressive.ExpressiveLoadingViewFactory
+import com.zenzer0s.kite.expressive.ExpressiveQuickActionsViewFactory
+
+class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
@@ -66,6 +69,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine.platformViewsController.registry.registerViewFactory("com.zenzer0s.kite/expressive_loading", ExpressiveLoadingViewFactory())
+        flutterEngine.platformViewsController.registry.registerViewFactory("com.zenzer0s.kite/quick_actions", ExpressiveQuickActionsViewFactory(flutterEngine.dartExecutor.binaryMessenger))
 
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
