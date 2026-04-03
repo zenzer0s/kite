@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/ytdlp_provider.dart';
+import 'telegram_settings_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -22,17 +23,6 @@ class SettingsScreen extends ConsumerWidget {
         : ytdlp.lastStatus == null
         ? ytdlp.version
         : '${ytdlp.version} · ${ytdlp.lastStatus}';
-
-    String formatLabel(DefaultFormat f) {
-      switch (f) {
-        case DefaultFormat.auto:
-          return 'Best quality (auto)';
-        case DefaultFormat.videoOnly:
-          return 'Video only';
-        case DefaultFormat.audioOnly:
-          return 'Audio only (MP3)';
-      }
-    }
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -92,16 +82,15 @@ class SettingsScreen extends ConsumerWidget {
                       _pickDirectory(context, ref, settings.downloadDir),
                 ),
                 _SettingsTile(
-                  title: 'Default Format',
-                  subtitle: formatLabel(settings.defaultFormat),
-                  icon: Icons.high_quality_rounded,
+                  title: 'Download Behavior',
+                  subtitle: settings.defaultFormat == DefaultFormat.auto
+                      ? 'Auto (Best Quality)'
+                      : 'Show custom options',
+                  icon: settings.defaultFormat == DefaultFormat.auto
+                      ? Icons.flash_on_rounded
+                      : Icons.list_alt_rounded,
                   cs: cs,
-                  trailing: Icon(
-                    Icons.chevron_right_rounded,
-                    color: cs.outline,
-                  ),
-                  onTap: () =>
-                      _pickFormat(context, ref, settings.defaultFormat),
+                  onTap: () => _showFormatDialog(context, ref, settings),
                 ),
                 _SettingsTile(
                   title: 'Concurrent Downloads',
@@ -118,6 +107,38 @@ class SettingsScreen extends ConsumerWidget {
                     settings.concurrentDownloads,
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _SettingsGroup(
+              title: 'Telegram',
+              cs: cs,
+              children: [
+                _SettingsTile(
+                  title: 'Telegram Integration',
+                  subtitle: settings.telegramUpload
+                      ? 'Auto-upload enabled'
+                      : 'Configure bot & auto-upload',
+                  icon: Icons.send_rounded,
+                  cs: cs,
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: cs.outline,
+                  ),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const TelegramSettingsScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _SettingsGroup(
+              title: 'Advanced',
+              cs: cs,
+              children: [
+                _BatteryOptimizationTile(cs: cs),
               ],
             ),
             const SizedBox(height: 16),
@@ -179,18 +200,13 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-  Future<void> _pickFormat(
+  Future<void> _showFormatDialog(
     BuildContext context,
     WidgetRef ref,
-    DefaultFormat current,
+    AppSettings settings,
   ) async {
     final cs = Theme.of(context).colorScheme;
-    final options = [
-      (DefaultFormat.auto, 'Best quality (auto)', Icons.auto_awesome_rounded),
-      (DefaultFormat.videoOnly, 'Video only', Icons.videocam_rounded),
-      (DefaultFormat.audioOnly, 'Audio only (MP3)', Icons.audio_file_rounded),
-    ];
-    await showModalBottomSheet<void>(
+    final result = await showModalBottomSheet<DefaultFormat>(
       context: context,
       backgroundColor: cs.surfaceContainerHigh,
       shape: const RoundedRectangleBorder(
@@ -213,60 +229,31 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                ...options.map((opt) {
-                  final (format, label, icon) = opt;
-                  final selected = format == current;
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      ref
-                          .read(settingsProvider.notifier)
-                          .setDefaultFormat(format);
-                      Navigator.pop(ctx);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            icon,
-                            color: selected ? cs.primary : cs.outline,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Text(
-                              label,
-                              style: GoogleFonts.outfit(
-                                fontSize: 14,
-                                fontWeight: selected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                                color: selected ? cs.primary : cs.onSurface,
-                              ),
-                            ),
-                          ),
-                          if (selected)
-                            Icon(
-                              Icons.check_rounded,
-                              color: cs.primary,
-                              size: 18,
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
+                RadioListTile<DefaultFormat>(
+                  title: Text('Auto', style: GoogleFonts.outfit()),
+                  subtitle: Text('Instantly download the best video & audio', style: GoogleFonts.outfit(fontSize: 12)),
+                  value: DefaultFormat.auto,
+                  groupValue: settings.defaultFormat,
+                  onChanged: (v) => Navigator.pop(context, v),
+                  activeColor: cs.primary,
+                ),
+                RadioListTile<DefaultFormat>(
+                  title: Text('Custom', style: GoogleFonts.outfit()),
+                  subtitle: Text('Always pick quality and format from a list', style: GoogleFonts.outfit(fontSize: 12)),
+                  value: DefaultFormat.custom,
+                  groupValue: settings.defaultFormat,
+                  onChanged: (v) => Navigator.pop(context, v),
+                  activeColor: cs.primary,
+                ),
               ],
             ),
           ),
         );
       },
     );
+    if (result != null) {
+      ref.read(settingsProvider.notifier).setDefaultFormat(result);
+    }
   }
 
   Future<void> _pickConcurrent(
@@ -459,9 +446,63 @@ class _SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
-            ?trailing,
+            if (trailing != null) trailing!,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _BatteryOptimizationTile extends StatefulWidget {
+  final ColorScheme cs;
+
+  const _BatteryOptimizationTile({required this.cs});
+
+  @override
+  State<_BatteryOptimizationTile> createState() => _BatteryOptimizationTileState();
+}
+
+class _BatteryOptimizationTileState extends State<_BatteryOptimizationTile> {
+  static const platform = MethodChannel('com.zenzer0s.kite/downloader');
+  bool _isIgnoring = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkStatus();
+  }
+
+  Future<void> _checkStatus() async {
+    try {
+      final bool result = await platform.invokeMethod('isIgnoringBatteryOptimizations');
+      if (mounted) setState(() => _isIgnoring = result);
+    } catch (_) {}
+  }
+
+  Future<void> _requestIgnore() async {
+    try {
+      await platform.invokeMethod('requestIgnoreBatteryOptimizations');
+      await Future.delayed(const Duration(seconds: 1));
+      _checkStatus();
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsTile(
+      title: 'Ignore Battery Optimizations',
+      subtitle: _isIgnoring 
+          ? 'Unrestricted background downloads' 
+          : 'Allow uninterrupted background downloads',
+      icon: Icons.battery_charging_full_rounded,
+      cs: widget.cs,
+      trailing: Switch(
+        value: _isIgnoring,
+        onChanged: (val) {
+          HapticFeedback.lightImpact();
+          _requestIgnore();
+        },
       ),
     );
   }

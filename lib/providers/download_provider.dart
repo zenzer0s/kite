@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../database/app_database.dart';
 import '../services/download_service.dart';
+import '../services/telegram_service.dart';
 import 'database_provider.dart';
+import 'settings_provider.dart';
 
 enum DownloadStatus { idle, fetching, downloading, paused, done, error }
 
@@ -53,16 +57,18 @@ class DownloadNotifier extends Notifier<DownloadState> {
   @override
   DownloadState build() => const DownloadState();
 
-  Future<void> fetchInfo(String url) async {
-    state = state.copyWith(status: DownloadStatus.fetching, errorMessage: null);
+  Future<VideoInfo?> fetchInfo(String url) async {
     try {
+      state = state.copyWith(status: DownloadStatus.fetching, info: null);
       final info = await DownloadService.fetchInfo(url);
       state = state.copyWith(status: DownloadStatus.idle, info: info);
+      return info;
     } catch (e) {
       state = state.copyWith(
         status: DownloadStatus.error,
         errorMessage: e.toString(),
       );
+      return null;
     }
   }
 
@@ -127,18 +133,28 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
       final task = state[p.taskId];
       if (task == null) return;
       if (p.error != null) {
+        debugPrint('Kite: Download error from native: ${p.error}');
         _update(
           p.taskId,
           task.copyWith(status: DownloadStatus.error, errorMessage: p.error),
         );
       } else if (p.done) {
+        debugPrint('Kite: Download done native! Saving to history and Telegram: ${p.taskId}');
         if (_savedTaskIds.add(p.taskId)) {
           await _saveToHistory(task);
+          debugPrint('Kite: History saved. Triggering Telegram...');
+          await _maybeUploadToTelegram(task);
+          debugPrint('Kite: Telegram finished.');
         }
-        _update(
-          p.taskId,
-          task.copyWith(status: DownloadStatus.done, progress: 100),
-        );
+        
+        // Only set status to done if it wasn't already set to error by the Telegram uploader
+        final currentTask = state[p.taskId];
+        if (currentTask != null && currentTask.status != DownloadStatus.error) {
+          _update(
+            p.taskId,
+            currentTask.copyWith(status: DownloadStatus.done, progress: 100),
+          );
+        }
       } else {
         _update(
           p.taskId,
@@ -171,7 +187,7 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
         taskId: taskId,
         info: info,
         status: DownloadStatus.downloading,
-        targetExt: audioOnly ? 'mp3' : info.ext,
+        targetExt: audioOnly ? 'mp3' : 'mp4',
       );
       state = {...state, taskId: task};
     } catch (e) {
@@ -233,6 +249,55 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
         downloadedAt: Value(DateTime.now()),
       ),
     );
+  }
+
+  Future<void> _maybeUploadToTelegram(DownloadTask task) async {
+    debugPrint('Kite: _maybeUploadToTelegram checking settings...');
+    final settings = ref.read(settingsProvider);
+    if (!settings.telegramUpload || !settings.telegramFullyConfigured) {
+      debugPrint('Kite: Telegram not configured. Skipping upload.');
+      return;
+    }
+
+    final safeTitle = task.info.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final ext = task.targetExt ?? task.info.ext;
+    String filePath = '${task.outputDir}/$safeTitle.$ext';
+    debugPrint('Kite: Telegram targeting filePath: $filePath');
+
+    // Fallback search if the predicted path is not exact
+    if (!File(filePath).existsSync()) {
+      debugPrint('Kite: Predicted path missing, searching in dir: ${task.outputDir}');
+      try {
+        final dir = Directory(task.outputDir);
+        final files = dir.listSync().whereType<File>().toList()
+          ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+        for (var f in files) {
+          if (f.path.contains(safeTitle)) {
+            filePath = f.path;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    final result = await TelegramService.uploadFile(
+        filePath: filePath,
+        token: settings.telegramBotToken,
+        chatId: settings.telegramChatId,
+    );
+
+    if (!result.isSuccess) {
+      final currentTask = state[task.taskId];
+      if (currentTask != null) {
+        _update(
+          task.taskId,
+          currentTask.copyWith(
+            status: DownloadStatus.error,
+            errorMessage: 'Telegram Upload: ${result.error}',
+          ),
+        );
+      }
+    }
   }
 }
 

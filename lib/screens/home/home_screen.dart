@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../providers/download_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../settings/settings_screen.dart';
 import 'media_bottom_sheet.dart';
 
@@ -64,30 +65,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (_isSheetOpen) return;
     _urlController.text = url;
     HapticFeedback.lightImpact();
-    ref.read(downloadProvider.notifier).fetchInfo(url);
 
-    setState(() {
-      _isSheetOpen = true;
-    });
+    final isAuto = ref.read(settingsProvider).defaultFormat == DefaultFormat.auto;
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      transitionAnimationController: _sheetCtrl,
-      builder: (context) => MediaBottomSheet(onDownload: _startDownload),
-    ).then((_) {
+    if (!isAuto) {
       setState(() {
-        _isSheetOpen = false;
+        _isSheetOpen = true;
       });
-      final dl = ref.read(downloadProvider);
-      if (dl.status == DownloadStatus.idle ||
-          dl.status == DownloadStatus.error) {
-        _urlController.clear();
+    }
+    
+    final info = await ref.read(downloadProvider.notifier).fetchInfo(url);
+    if (info == null) {
+      if (!isAuto && mounted) {
+        setState(() {
+          _isSheetOpen = false;
+        });
       }
+      return;
+    }
+
+    if (isAuto) {
+      HapticFeedback.mediumImpact();
+      ref.read(downloadsProvider.notifier).startDownload(
+            info: info,
+            audioOnly: false,
+          );
+      if (mounted) _urlController.clear();
       ref.read(downloadProvider.notifier).reset();
-    });
+    } else {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.5),
+        transitionAnimationController: _sheetCtrl,
+        builder: (context) => MediaBottomSheet(onDownload: _startDownload),
+      ).then((_) {
+        if (mounted) {
+          setState(() {
+            _isSheetOpen = false;
+          });
+        }
+        final dl = ref.read(downloadProvider);
+        if (dl.status == DownloadStatus.idle ||
+            dl.status == DownloadStatus.error) {
+          if (mounted) _urlController.clear();
+        }
+        ref.read(downloadProvider.notifier).reset();
+      });
+    }
   }
 
   void _startDownload({required bool audioOnly, String? formatId}) {

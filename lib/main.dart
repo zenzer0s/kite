@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,7 @@ import 'theme/app_theme.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/downloads/downloads_screen.dart';
+import 'screens/home/share_handler_screen.dart';
 import 'widgets/floating_nav_toolbar.dart';
 
 final navigationProvider = NotifierProvider<_NavNotifier, int>(
@@ -28,7 +30,41 @@ void main() {
     ),
   );
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  runApp(const ProviderScope(child: KiteApp()));
+
+  final initialRoute = PlatformDispatcher.instance.defaultRouteName;
+  if (initialRoute == '/share_handler') {
+    runApp(const ProviderScope(child: ShareApp()));
+  } else {
+    runApp(const ProviderScope(child: KiteApp()));
+  }
+}
+
+class ShareApp extends ConsumerWidget {
+  const ShareApp({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeProvider);
+    return DynamicColorBuilder(
+      builder: (ColorScheme? lightDynamic, ColorScheme? darkDynamic) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          color: Colors.transparent,
+          theme: AppTheme.lightTheme(lightDynamic).copyWith(
+            scaffoldBackgroundColor: Colors.transparent,
+          ),
+          darkTheme: AppTheme.darkTheme(darkDynamic).copyWith(
+            scaffoldBackgroundColor: Colors.transparent,
+          ),
+          themeMode: themeMode,
+          initialRoute: '/share_handler',
+          routes: {
+            '/share_handler': (context) => const ShareHandlerScreen(),
+          },
+        );
+      },
+    );
+  }
 }
 
 class KiteApp extends ConsumerWidget {

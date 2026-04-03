@@ -9,8 +9,9 @@ import '../../theme/app_theme.dart';
 
 class MediaBottomSheet extends ConsumerWidget {
   final void Function({required bool audioOnly, String? formatId}) onDownload;
+  final bool isTransparentOverlay;
 
-  const MediaBottomSheet({super.key, required this.onDownload});
+  const MediaBottomSheet({super.key, required this.onDownload, this.isTransparentOverlay = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -97,9 +98,9 @@ class MediaBottomSheet extends ConsumerWidget {
                   );
                 },
                 child: isLoading
-                    ? const KeyedSubtree(
-                        key: ValueKey('loading'),
-                        child: _ContainedLoadingIndicator(),
+                    ? KeyedSubtree(
+                        key: const ValueKey('loading'),
+                        child: _ContainedLoadingIndicator(isTransparentOverlay: isTransparentOverlay),
                       )
                     : SingleChildScrollView(
                         key: const ValueKey('data'),
@@ -107,6 +108,7 @@ class MediaBottomSheet extends ConsumerWidget {
                         child: _DataState(
                           info: dl.info!,
                           onDownload: onDownload,
+                          isTransparentOverlay: isTransparentOverlay,
                         ),
                       ),
               ),
@@ -119,11 +121,12 @@ class MediaBottomSheet extends ConsumerWidget {
 }
 
 class _ContainedLoadingIndicator extends StatelessWidget {
-  const _ContainedLoadingIndicator();
+  final bool isTransparentOverlay;
+  const _ContainedLoadingIndicator({this.isTransparentOverlay = false});
 
   @override
   Widget build(BuildContext context) {
-    if (Theme.of(context).platform == TargetPlatform.android) {
+    if (Theme.of(context).platform == TargetPlatform.android && !isTransparentOverlay) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 80.0),
@@ -167,8 +170,9 @@ class _ContainedLoadingIndicator extends StatelessWidget {
 class _DataState extends StatelessWidget {
   final VideoInfo info;
   final void Function({required bool audioOnly, String? formatId}) onDownload;
+  final bool isTransparentOverlay;
 
-  const _DataState({required this.info, required this.onDownload});
+  const _DataState({required this.info, required this.onDownload, this.isTransparentOverlay = false});
 
   static double _effectiveHeight(VideoFormat f) {
     if ((f.height ?? 0) > 0) return f.height!;
@@ -329,7 +333,7 @@ class _DataState extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           height: 48,
-          child: Theme.of(context).platform == TargetPlatform.android
+          child: Theme.of(context).platform == TargetPlatform.android && !isTransparentOverlay
               ? AndroidView(
                   viewType: 'com.zenzer0s.kite/quick_actions',
                   creationParams: {'hasThumbnail': info.thumbnail.isNotEmpty},

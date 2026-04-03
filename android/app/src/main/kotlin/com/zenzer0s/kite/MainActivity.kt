@@ -27,7 +27,7 @@ import java.util.concurrent.CancellationException
 import com.zenzer0s.kite.expressive.ExpressiveLoadingViewFactory
 import com.zenzer0s.kite.expressive.ExpressiveQuickActionsViewFactory
 
-class MainActivity : FlutterFragmentActivity() {
+open class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
@@ -365,6 +365,42 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                     }
 
+                    "minimize" -> {
+                        moveTaskToBack(true)
+                        result.success(true)
+                    }
+
+                    "makeUntouchable" -> {
+                        window.addFlags(
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        )
+                        result.success(true)
+                    }
+
+                    "makeTouchable" -> {
+                        window.clearFlags(
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        )
+                        result.success(true)
+                    }
+
+                    "isIgnoringBatteryOptimizations" -> {
+                        val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                        result.success(pm.isIgnoringBatteryOptimizations(packageName))
+                    }
+
+                    "requestIgnoreBatteryOptimizations" -> {
+                        val pm = getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            intent.data = android.net.Uri.parse("package:$packageName")
+                            startActivity(intent)
+                        }
+                        result.success(true)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -382,6 +418,10 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
+        window.clearFlags(
+            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        )
         super.onNewIntent(intent)
         val url = extractSharedUrl(intent) ?: return
         if (shareSink != null) {
@@ -392,6 +432,10 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onResume() {
+        window.clearFlags(
+            android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        )
         super.onResume()
         val url = extractSharedUrl(intent) ?: return
         intent.action = null
