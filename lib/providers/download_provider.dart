@@ -5,7 +5,7 @@ import '../database/app_database.dart';
 import '../services/download_service.dart';
 import 'database_provider.dart';
 
-enum DownloadStatus { idle, fetching, downloading, done, error }
+enum DownloadStatus { idle, fetching, downloading, paused, done, error }
 
 class DownloadState {
   final DownloadStatus status;
@@ -50,38 +50,8 @@ class DownloadState {
 }
 
 class DownloadNotifier extends Notifier<DownloadState> {
-  StreamSubscription? _progressSub;
-  final Set<String> _savedTaskIds = <String>{};
-
   @override
-  DownloadState build() {
-    ref.onDispose(() => _progressSub?.cancel());
-    _listenProgress();
-    return const DownloadState();
-  }
-
-  void _listenProgress() {
-    _progressSub = DownloadService.progressStream.listen((p) async {
-      if (state.activeTaskId != p.taskId) return;
-      if (p.error != null) {
-        state = state.copyWith(
-          status: DownloadStatus.error,
-          errorMessage: p.error,
-        );
-      } else if (p.done) {
-        if (_savedTaskIds.add(p.taskId)) {
-          await saveToHistory(_buildCompletedFilePath());
-        }
-        state = state.copyWith(status: DownloadStatus.done, progress: 100);
-      } else {
-        state = state.copyWith(
-          status: DownloadStatus.downloading,
-          progress: p.progress,
-          currentLine: p.line,
-        );
-      }
-    });
-  }
+  DownloadState build() => const DownloadState();
 
   Future<void> fetchInfo(String url) async {
     state = state.copyWith(status: DownloadStatus.fetching, errorMessage: null);
@@ -96,72 +66,177 @@ class DownloadNotifier extends Notifier<DownloadState> {
     }
   }
 
+  void reset() => state = const DownloadState();
+}
+
+final downloadProvider = NotifierProvider<DownloadNotifier, DownloadState>(
+  DownloadNotifier.new,
+);
+
+class DownloadTask {
+  final String taskId;
+  final VideoInfo info;
+  final DownloadStatus status;
+  final double progress;
+  final String? currentLine;
+  final String? errorMessage;
+  final String? targetExt;
+  final String outputDir;
+
+  const DownloadTask({
+    required this.taskId,
+    required this.info,
+    this.status = DownloadStatus.downloading,
+    this.progress = 0,
+    this.currentLine,
+    this.errorMessage,
+    this.targetExt,
+    this.outputDir = '/storage/emulated/0/Download/Kite',
+  });
+
+  DownloadTask copyWith({
+    DownloadStatus? status,
+    double? progress,
+    String? currentLine,
+    String? errorMessage,
+  }) => DownloadTask(
+    taskId: taskId,
+    info: info,
+    status: status ?? this.status,
+    progress: progress ?? this.progress,
+    currentLine: currentLine ?? this.currentLine,
+    errorMessage: errorMessage ?? this.errorMessage,
+    targetExt: targetExt,
+    outputDir: outputDir,
+  );
+}
+
+class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
+  StreamSubscription? _progressSub;
+  final Set<String> _savedTaskIds = <String>{};
+
+  @override
+  Map<String, DownloadTask> build() {
+    ref.onDispose(() => _progressSub?.cancel());
+    _listenProgress();
+    return const {};
+  }
+
+  void _listenProgress() {
+    _progressSub = DownloadService.progressStream.listen((p) async {
+      final task = state[p.taskId];
+      if (task == null) return;
+      if (p.error != null) {
+        _update(
+          p.taskId,
+          task.copyWith(status: DownloadStatus.error, errorMessage: p.error),
+        );
+      } else if (p.done) {
+        if (_savedTaskIds.add(p.taskId)) {
+          await _saveToHistory(task);
+        }
+        _update(
+          p.taskId,
+          task.copyWith(status: DownloadStatus.done, progress: 100),
+        );
+      } else {
+        _update(
+          p.taskId,
+          task.copyWith(
+            status: DownloadStatus.downloading,
+            progress: p.progress,
+            currentLine: p.line,
+          ),
+        );
+      }
+    });
+  }
+
+  void _update(String taskId, DownloadTask task) {
+    state = {...state, taskId: task};
+  }
+
   Future<void> startDownload({
+    required VideoInfo info,
     required bool audioOnly,
     String? formatId,
   }) async {
-    final info = state.info;
-    if (info == null) return;
-    state = state.copyWith(status: DownloadStatus.downloading, progress: 0);
     try {
       final taskId = await DownloadService.startDownload(
         url: info.url,
         audioOnly: audioOnly,
         formatId: formatId,
       );
-      state = state.copyWith(
-        activeTaskId: taskId,
-        outputDir: '/storage/emulated/0/Download/Kite',
+      final task = DownloadTask(
+        taskId: taskId,
+        info: info,
+        status: DownloadStatus.downloading,
         targetExt: audioOnly ? 'mp3' : info.ext,
       );
+      state = {...state, taskId: task};
     } catch (e) {
-      state = state.copyWith(
-        status: DownloadStatus.error,
-        errorMessage: e.toString(),
-      );
+      final errorTaskId = 'error_${DateTime.now().millisecondsSinceEpoch}';
+      state = {
+        ...state,
+        errorTaskId: DownloadTask(
+          taskId: errorTaskId,
+          info: info,
+          status: DownloadStatus.error,
+          errorMessage: e.toString(),
+        ),
+      };
     }
   }
 
-  Future<void> cancelDownload() async {
-    final taskId = state.activeTaskId;
-    if (taskId == null) return;
+  Future<void> cancelTask(String taskId) async {
     _savedTaskIds.remove(taskId);
     await DownloadService.cancelDownload(taskId);
-    state = const DownloadState();
+    final updated = Map<String, DownloadTask>.from(state);
+    updated.remove(taskId);
+    state = updated;
   }
 
-  void reset() => state = const DownloadState();
+  Future<void> pauseTask(String taskId) async {
+    final task = state[taskId];
+    if (task == null) return;
+    await DownloadService.pauseDownload(taskId);
+    _update(taskId, task.copyWith(status: DownloadStatus.paused));
+  }
 
-  Future<void> saveToHistory(String filePath) async {
-    final info = state.info;
-    if (info == null) return;
+  Future<void> resumeTask(String taskId) async {
+    final task = state[taskId];
+    if (task == null) return;
+    await DownloadService.resumeDownload(taskId);
+    _update(taskId, task.copyWith(status: DownloadStatus.downloading));
+  }
+
+  void dismissTask(String taskId) {
+    final updated = Map<String, DownloadTask>.from(state);
+    updated.remove(taskId);
+    state = updated;
+  }
+
+  Future<void> _saveToHistory(DownloadTask task) async {
     final db = ref.read(databaseProvider);
+    final safeTitle = task.info.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final ext = task.targetExt ?? task.info.ext;
+    final filePath = '${task.outputDir}/$safeTitle.$ext';
     await db.insertDownload(
       DownloadedItemsCompanion(
-        title: Value(info.title),
-        uploader: Value(info.uploader),
-        url: Value(info.url),
-        thumbnail: Value(info.thumbnail),
+        title: Value(task.info.title),
+        uploader: Value(task.info.uploader),
+        url: Value(task.info.url),
+        thumbnail: Value(task.info.thumbnail),
         filePath: Value(filePath),
-        ext: Value(state.targetExt ?? info.ext),
-        duration: Value(info.duration),
+        ext: Value(ext),
+        duration: Value(task.info.duration),
         downloadedAt: Value(DateTime.now()),
       ),
     );
   }
-
-  String _buildCompletedFilePath() {
-    final info = state.info;
-    if (info == null) {
-      return '';
-    }
-    final safeTitle = info.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final ext = state.targetExt ?? info.ext;
-    final outputDir = state.outputDir ?? '/storage/emulated/0/Download/Kite';
-    return '$outputDir/$safeTitle.$ext';
-  }
 }
 
-final downloadProvider = NotifierProvider<DownloadNotifier, DownloadState>(
-  DownloadNotifier.new,
-);
+final downloadsProvider =
+    NotifierProvider<DownloadsNotifier, Map<String, DownloadTask>>(
+      DownloadsNotifier.new,
+    );

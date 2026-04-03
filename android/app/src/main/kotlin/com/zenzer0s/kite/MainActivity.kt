@@ -3,6 +3,8 @@ package com.zenzer0s.kite
 import android.content.Context
 import android.os.Environment
 import android.os.SystemClock
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -38,11 +40,42 @@ class MainActivity : FlutterFragmentActivity() {
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private val activeJobs = mutableMapOf<String, Job>()
     private val canceledTaskIds = mutableSetOf<String>()
+    private val pausedTaskIds = mutableSetOf<String>()
     private var progressSink: EventChannel.EventSink? = null
     private val initMutex = Mutex()
     private var ytDlpReady = false
     private val ytDlpPrefs by lazy {
         applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    private fun getProcessPid(process: Process): Int {
+        return try {
+            val f = process.javaClass.getDeclaredField("pid")
+            f.isAccessible = true
+            f.getInt(process)
+        } catch (_: Exception) {
+            try {
+                val m = process.javaClass.getDeclaredMethod("pid")
+                m.isAccessible = true
+                (m.invoke(process) as? Long)?.toInt() ?: -1
+            } catch (e: Exception) {
+                Log.w("KiteMain", "getProcessPid failed: ${e.message}")
+                -1
+            }
+        }
+    }
+
+    private fun getProcessFromMap(taskId: String): Process? {
+        return try {
+            val field = YoutubeDL::class.java.getDeclaredField("idProcessMap")
+            field.isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            val map = field.get(YoutubeDL) as? Map<String, Process>
+            map?.get(taskId)
+        } catch (e: Exception) {
+            Log.w("KiteMain", "getProcessFromMap failed: ${e.message}")
+            null
+        }
     }
 
     private fun storeYtDlpVersion(version: String?) {
@@ -150,8 +183,14 @@ class MainActivity : FlutterFragmentActivity() {
                                                 addOption("-x")
                                                 addOption("--audio-format", "mp3")
                                             }
-                                            formatId != null -> addOption("-f", formatId)
-                                            else -> addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+                                            formatId != null -> {
+                                                addOption("-f", "$formatId+bestaudio[ext=m4a]/$formatId+bestaudio/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+                                                addOption("--merge-output-format", "mp4")
+                                            }
+                                            else -> {
+                                                addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
+                                                addOption("--merge-output-format", "mp4")
+                                            }
                                         }
                                     }
                                     val requestBuiltAt = SystemClock.elapsedRealtime()
@@ -210,9 +249,59 @@ class MainActivity : FlutterFragmentActivity() {
                         result.success(taskId)
                     }
 
+                    "pauseDownload" -> {
+                        val taskId = call.argument<String>("taskId") ?: return@setMethodCallHandler result.error("INVALID", "taskId required", null)
+                        try {
+                            val process = getProcessFromMap(taskId)
+                            if (process != null) {
+                                val pid = getProcessPid(process)
+                                if (pid != -1) {
+                                    Os.kill(pid, OsConstants.SIGSTOP)
+                                    pausedTaskIds.add(taskId)
+                                    result.success(true)
+                                } else {
+                                    result.error("PAUSE_ERROR", "Could not get process PID", null)
+                                }
+                            } else {
+                                result.error("PAUSE_ERROR", "Process not found for taskId=$taskId", null)
+                            }
+                        } catch (e: Exception) {
+                            result.error("PAUSE_ERROR", e.message, null)
+                        }
+                    }
+
+                    "resumeDownload" -> {
+                        val taskId = call.argument<String>("taskId") ?: return@setMethodCallHandler result.error("INVALID", "taskId required", null)
+                        try {
+                            val process = getProcessFromMap(taskId)
+                            if (process != null) {
+                                val pid = getProcessPid(process)
+                                if (pid != -1) {
+                                    Os.kill(pid, OsConstants.SIGCONT)
+                                    pausedTaskIds.remove(taskId)
+                                    result.success(true)
+                                } else {
+                                    result.error("RESUME_ERROR", "Could not get process PID", null)
+                                }
+                            } else {
+                                result.error("RESUME_ERROR", "Process not found for taskId=$taskId", null)
+                            }
+                        } catch (e: Exception) {
+                            result.error("RESUME_ERROR", e.message, null)
+                        }
+                    }
+
                     "cancelDownload" -> {
                         val taskId = call.argument<String>("taskId") ?: return@setMethodCallHandler result.error("INVALID", "taskId required", null)
                         try {
+                            if (pausedTaskIds.contains(taskId)) {
+                                val process = getProcessFromMap(taskId)
+                                if (process != null) {
+                                    val pid = getProcessPid(process)
+                                    if (pid != -1) Os.kill(pid, OsConstants.SIGCONT)
+                                }
+                                pausedTaskIds.remove(taskId)
+                            }
                             canceledTaskIds.add(taskId)
                             activeJobs[taskId]?.cancel(CancellationException("task canceled"))
                             YoutubeDL.getInstance().destroyProcessById(taskId)

@@ -183,6 +183,14 @@ class DownloadService {
     await _method.invokeMethod('cancelDownload', {'taskId': taskId});
   }
 
+  static Future<void> pauseDownload(String taskId) async {
+    await _method.invokeMethod('pauseDownload', {'taskId': taskId});
+  }
+
+  static Future<void> resumeDownload(String taskId) async {
+    await _method.invokeMethod('resumeDownload', {'taskId': taskId});
+  }
+
   static Future<String> updateYtDlp() async {
     final status = await _method.invokeMethod<String>('updateYtDlp');
     return status ?? 'ALREADY_UP_TO_DATE';

@@ -3,10 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import '../../main.dart';
 import '../../providers/download_provider.dart';
 import 'media_bottom_sheet.dart';
-
-// Material 3 Dark Color Tokens (Purple Expressive Theme)
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -30,8 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       });
     });
     _focusNode.addListener(() {
-      setState(() {
-      });
+      setState(() {});
     });
   }
 
@@ -47,10 +45,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (url.isEmpty) return;
 
     HapticFeedback.lightImpact();
-    // Start fetching
     ref.read(downloadProvider.notifier).fetchInfo(url);
 
-    // Show Bottom Sheet immediately
     setState(() {
       _isSheetOpen = true;
     });
@@ -65,19 +61,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       setState(() {
         _isSheetOpen = false;
       });
-      // Clear input after sheet closes successfully on start
       final dl = ref.read(downloadProvider);
-      if (dl.status == DownloadStatus.downloading) {
+      if (dl.status == DownloadStatus.idle ||
+          dl.status == DownloadStatus.error) {
         _urlController.clear();
       }
+      ref.read(downloadProvider.notifier).reset();
     });
   }
 
   void _startDownload({required bool audioOnly, String? formatId}) {
     HapticFeedback.mediumImpact();
+    final info = ref.read(downloadProvider).info;
+    if (info == null) return;
     ref
-        .read(downloadProvider.notifier)
-        .startDownload(audioOnly: audioOnly, formatId: formatId);
+        .read(downloadsProvider.notifier)
+        .startDownload(info: info, audioOnly: audioOnly, formatId: formatId);
+    _urlController.clear();
     Navigator.of(context).pop();
   }
 
@@ -91,6 +91,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dl = ref.watch(downloadProvider);
+    final tasks = ref.watch(downloadsProvider);
+    final isFetching = dl.status == DownloadStatus.fetching;
+    final activeTasks = tasks.values.toList();
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: AnimatedContainer(
@@ -102,7 +108,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           1.0,
         )..setTranslationRaw(0.0, _isSheetOpen ? -24.0 : 0.0, 0.0),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: cs.surface,
           borderRadius: _isSheetOpen
               ? BorderRadius.circular(32)
               : BorderRadius.zero,
@@ -110,7 +116,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: SafeArea(
           child: Column(
             children: [
-              // Top App Bar
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
                 child: Row(
@@ -120,7 +125,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       children: [
                         PhosphorIcon(
                           PhosphorIcons.paperPlaneTilt(PhosphorIconsStyle.fill),
-                          color: Theme.of(context).colorScheme.primary,
+                          color: cs.primary,
                           size: 24,
                         ),
                         const SizedBox(width: 8),
@@ -129,69 +134,65 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           style: GoogleFonts.outfit(
                             fontSize: 22,
                             fontWeight: FontWeight.w500,
-                            color: Theme.of(context).colorScheme.onSurface,
+                            color: cs.onSurface,
                           ),
                         ),
                       ],
                     ),
                     IconButton(
-                      icon: Icon(
-                        Icons.settings_outlined,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                      onPressed: () {},
+                      icon: Icon(Icons.settings_outlined, color: cs.onSurface),
+                      onPressed: () {
+                        ref.read(navigationProvider.notifier).go(2);
+                      },
                       style: IconButton.styleFrom(
-                        hoverColor: Theme.of(
-                          context,
-                        ).colorScheme.surfaceContainerHighest,
+                        hoverColor: cs.surfaceContainerHighest,
                       ),
                     ),
                   ],
                 ),
               ),
-
-              // Main Content
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24.0),
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisAlignment: activeTasks.isEmpty
+                        ? MainAxisAlignment.center
+                        : MainAxisAlignment.start,
                     children: [
-                      Text(
-                        'Download Media',
-                        style: GoogleFonts.outfit(
-                          fontSize: 36,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.5,
-                          height: 1.2,
-                          color: Theme.of(context).colorScheme.onSurface,
+                      if (activeTasks.isEmpty) ...[
+                        Text(
+                          'Download Media',
+                          style: GoogleFonts.outfit(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.5,
+                            height: 1.2,
+                            color: cs.onSurface,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Paste a link to grab video or audio',
-                        style: GoogleFonts.outfit(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w400,
-                          color: Theme.of(context).colorScheme.outline,
-                          letterSpacing: 0.5,
+                        const SizedBox(height: 8),
+                        Text(
+                          'Paste a link to grab video or audio',
+                          style: GoogleFonts.outfit(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w400,
+                            color: cs.outline,
+                            letterSpacing: 0.5,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 40),
-
-                      // Input Bar
+                        const SizedBox(height: 40),
+                      ] else
+                        const SizedBox(height: 16),
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         height: 64,
                         decoration: BoxDecoration(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.surfaceContainerHigh,
+                          color: cs.surfaceContainerHigh,
                           borderRadius: BorderRadius.circular(32),
                           border: Border.all(
-                            color: Theme.of(context).colorScheme.primary,
+                            color: isFetching ? cs.secondary : cs.primary,
                             width: 2,
                           ),
                         ),
@@ -199,8 +200,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           children: [
                             const SizedBox(width: 20),
                             Icon(
-                              Icons.link_rounded,
-                              color: Theme.of(context).colorScheme.outline,
+                              isFetching
+                                  ? Icons.hourglass_top_rounded
+                                  : Icons.link_rounded,
+                              color: isFetching ? cs.secondary : cs.outline,
                               size: 24,
                             ),
                             const SizedBox(width: 12),
@@ -208,22 +211,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: TextField(
                                 controller: _urlController,
                                 focusNode: _focusNode,
+                                enabled: !isFetching,
                                 style: GoogleFonts.outfit(
                                   fontSize: 16,
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurface,
+                                  color: cs.onSurface,
                                 ),
-                                cursorColor: Theme.of(
-                                  context,
-                                ).colorScheme.primary,
+                                cursorColor: cs.primary,
                                 onSubmitted: (_) => _fetchInfo(),
                                 decoration: InputDecoration(
-                                  hintText: 'https://...',
+                                  hintText: isFetching
+                                      ? 'Fetching info\u2026'
+                                      : 'https://...',
                                   hintStyle: GoogleFonts.outfit(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.outline,
+                                    color: cs.outline,
                                   ),
                                   border: InputBorder.none,
                                   enabledBorder: InputBorder.none,
@@ -235,11 +235,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                               ),
                             ),
-                            if (_isInputFilled)
+                            if (_isInputFilled && !isFetching)
                               IconButton(
                                 icon: Icon(
                                   Icons.cancel,
-                                  color: Theme.of(context).colorScheme.outline,
+                                  color: cs.outline,
                                   size: 24,
                                 ),
                                 onPressed: () {
@@ -251,72 +251,133 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-
-                      // Action Buttons
-                      if (!_isInputFilled)
-                        ElevatedButton.icon(
-                          onPressed: _pasteFromClipboard,
-                          icon: Icon(Icons.paste_rounded, size: 20),
-                          label: Text(
-                            'Paste from clipboard',
-                            style: GoogleFonts.outfit(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.secondaryContainer,
-                            foregroundColor: Theme.of(
-                              context,
-                            ).colorScheme.onSecondaryContainer,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(24),
-                            ),
-                          ),
-                        )
-                      else
-                        SizedBox(
-                          width: double.infinity,
-                          height: 56,
-                          child: ElevatedButton(
-                            onPressed: _fetchInfo,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(
-                                context,
-                              ).colorScheme.primary,
-                              foregroundColor: Theme.of(
-                                context,
-                              ).colorScheme.onPrimary,
-                              elevation: 2,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(28),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Download',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(Icons.arrow_forward_rounded, size: 20),
-                              ],
-                            ),
+                      const SizedBox(height: 16),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 250),
+                        transitionBuilder: (child, animation) => FadeTransition(
+                          opacity: animation,
+                          child: SlideTransition(
+                            position: Tween<Offset>(
+                              begin: const Offset(0, 0.08),
+                              end: Offset.zero,
+                            ).animate(animation),
+                            child: child,
                           ),
                         ),
-                      const SizedBox(height: 96), // Bottom offset
+                        child: !_isInputFilled && !isFetching
+                            ? ElevatedButton.icon(
+                                key: const ValueKey('paste'),
+                                onPressed: _pasteFromClipboard,
+                                icon: const Icon(Icons.paste_rounded, size: 20),
+                                label: Text(
+                                  'Paste from clipboard',
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: cs.secondaryContainer,
+                                  foregroundColor: cs.onSecondaryContainer,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                  ),
+                                ),
+                              )
+                            : SizedBox(
+                                key: const ValueKey('download'),
+                                width: double.infinity,
+                                height: 56,
+                                child: ElevatedButton(
+                                  onPressed: isFetching ? null : _fetchInfo,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: isFetching
+                                        ? cs.surfaceContainerHighest
+                                        : cs.primary,
+                                    foregroundColor: isFetching
+                                        ? cs.outline
+                                        : cs.onPrimary,
+                                    elevation: 2,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(28),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      if (isFetching) ...[
+                                        SizedBox(
+                                          width: 18,
+                                          height: 18,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: cs.secondary,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          'Fetching\u2026',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ] else ...[
+                                        Text(
+                                          'Download',
+                                          style: GoogleFonts.outfit(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 20,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                      ),
+                      if (activeTasks.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        Expanded(
+                          child: ListView.separated(
+                            itemCount: activeTasks.length,
+                            separatorBuilder: (context, i) =>
+                                const SizedBox(height: 10),
+                            padding: const EdgeInsets.only(bottom: 100),
+                            itemBuilder: (context, i) {
+                              final task = activeTasks[i];
+                              return _TaskCard(
+                                key: ValueKey(task.taskId),
+                                task: task,
+                                cs: cs,
+                                onPause: () => ref
+                                    .read(downloadsProvider.notifier)
+                                    .pauseTask(task.taskId),
+                                onResume: () => ref
+                                    .read(downloadsProvider.notifier)
+                                    .resumeTask(task.taskId),
+                                onCancel: () => ref
+                                    .read(downloadsProvider.notifier)
+                                    .cancelTask(task.taskId),
+                                onDismiss: () => ref
+                                    .read(downloadsProvider.notifier)
+                                    .dismissTask(task.taskId),
+                              );
+                            },
+                          ),
+                        ),
+                      ] else
+                        const SizedBox(height: 96),
                     ],
                   ),
                 ),
@@ -324,6 +385,245 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TaskCard extends StatelessWidget {
+  final DownloadTask task;
+  final ColorScheme cs;
+  final VoidCallback onPause;
+  final VoidCallback onResume;
+  final VoidCallback onCancel;
+  final VoidCallback onDismiss;
+
+  const _TaskCard({
+    super.key,
+    required this.task,
+    required this.cs,
+    required this.onPause,
+    required this.onResume,
+    required this.onCancel,
+    required this.onDismiss,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDone = task.status == DownloadStatus.done;
+    final isError = task.status == DownloadStatus.error;
+    final isPaused = task.status == DownloadStatus.paused;
+    final isActive = task.status == DownloadStatus.downloading;
+    final progress = (task.progress / 100).clamp(0.0, 1.0);
+
+    Color accentColor;
+    Color accentBg;
+    IconData statusIcon;
+    String statusLabel;
+
+    if (isError) {
+      accentColor = cs.error;
+      accentBg = cs.errorContainer;
+      statusIcon = Icons.error_outline_rounded;
+      statusLabel = 'Failed';
+    } else if (isDone) {
+      accentColor = cs.primary;
+      accentBg = cs.primaryContainer;
+      statusIcon = Icons.check_circle_outline_rounded;
+      statusLabel = 'Complete';
+    } else if (isPaused) {
+      accentColor = cs.tertiary;
+      accentBg = cs.tertiaryContainer;
+      statusIcon = Icons.pause_circle_outline_rounded;
+      statusLabel = 'Paused';
+    } else {
+      accentColor = cs.secondary;
+      accentBg = cs.secondaryContainer;
+      statusIcon = Icons.downloading_rounded;
+      statusLabel = 'Downloading';
+    }
+
+    return Dismissible(
+      key: ValueKey('dismiss_${task.taskId}'),
+      direction: DismissDirection.horizontal,
+      onDismissed: (_) {
+        HapticFeedback.mediumImpact();
+        if (isActive || isPaused) {
+          onCancel();
+        } else {
+          onDismiss();
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: accentBg,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(statusIcon, size: 18, color: accentColor),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          statusLabel,
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: accentColor,
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        Text(
+                          isError
+                              ? (task.errorMessage ?? 'Unknown error')
+                              : task.info.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onSurface,
+                          ),
+                        ),
+                        if (task.info.uploader.isNotEmpty && !isError)
+                          Text(
+                            task.info.uploader,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.outfit(
+                              fontSize: 11,
+                              color: cs.outline,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (isActive || isPaused) ...[
+                    _IconBtn(
+                      icon: isPaused
+                          ? Icons.play_arrow_rounded
+                          : Icons.pause_rounded,
+                      color: isPaused ? cs.tertiary : cs.secondary,
+                      bg: isPaused
+                          ? cs.tertiaryContainer
+                          : cs.secondaryContainer,
+                      onTap: isPaused ? onResume : onPause,
+                    ),
+                    const SizedBox(width: 6),
+                    _IconBtn(
+                      icon: Icons.close_rounded,
+                      color: cs.error,
+                      bg: cs.errorContainer,
+                      onTap: onCancel,
+                    ),
+                  ] else
+                    _IconBtn(
+                      icon: Icons.check_rounded,
+                      color: accentColor,
+                      bg: accentBg,
+                      onTap: onDismiss,
+                    ),
+                ],
+              ),
+            ),
+            if (!isError) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: isDone ? 1.0 : progress,
+                    minHeight: 4,
+                    backgroundColor: cs.outlineVariant.withValues(alpha: 0.2),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      isPaused
+                          ? accentColor.withValues(alpha: 0.45)
+                          : accentColor,
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+                child: Row(
+                  children: [
+                    if (task.currentLine != null && !isDone)
+                      Expanded(
+                        child: Text(
+                          task.currentLine!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.outfit(
+                            fontSize: 10,
+                            color: cs.outline,
+                          ),
+                        ),
+                      )
+                    else
+                      const Spacer(),
+                    Text(
+                      isDone ? '100%' : '${task.progress.toStringAsFixed(0)}%',
+                      style: GoogleFonts.outfit(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: accentColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _IconBtn extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color bg;
+  final VoidCallback onTap;
+
+  const _IconBtn({
+    required this.icon,
+    required this.color,
+    required this.bg,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 16, color: color),
       ),
     );
   }

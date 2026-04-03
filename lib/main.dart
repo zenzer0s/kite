@@ -9,6 +9,14 @@ import 'screens/downloads/downloads_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'widgets/floating_nav_toolbar.dart';
 
+final navigationProvider = NotifierProvider<_NavNotifier, int>(_NavNotifier.new);
+
+class _NavNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+  void go(int index) => state = index;
+}
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
@@ -82,6 +90,17 @@ class _MainScaffoldState extends ConsumerState<MainScaffold> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(navigationProvider, (_, next) {
+      if (_currentIndex != next) {
+        HapticFeedback.lightImpact();
+        _pageController.animateToPage(
+          next,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+
     String currentRoute = '/queue';
     if (_currentIndex == 1) currentRoute = '/downloads';
     if (_currentIndex == 2) currentRoute = '/settings';

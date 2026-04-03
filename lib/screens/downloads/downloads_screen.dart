@@ -343,7 +343,7 @@ class _DownloadCard extends StatelessWidget {
     final m = (seconds % 3600) ~/ 60;
     final s = seconds % 60;
     if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m';
-    return '${m}:${s.toString().padLeft(2, '0')}';
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -393,7 +393,7 @@ class _DownloadCard extends StatelessWidget {
                       ? Image.network(
                           item.thumbnail,
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
+                          errorBuilder: (_, _, _) =>
                               _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
                         )
                       : _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
