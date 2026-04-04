@@ -12,7 +12,9 @@ class AppSettings {
   final String telegramBotToken;
   final String telegramChatId;
   final bool telegramUpload;
+  
   final bool fastMode;
+  final bool initialized;
 
   const AppSettings({
     required this.downloadDir,
@@ -22,6 +24,7 @@ class AppSettings {
     this.telegramChatId = '',
     this.telegramUpload = false,
     this.fastMode = false,
+    this.initialized = false,
   });
 
   AppSettings copyWith({
@@ -32,6 +35,7 @@ class AppSettings {
     String? telegramChatId,
     bool? telegramUpload,
     bool? fastMode,
+    bool? initialized,
   }) {
     return AppSettings(
       downloadDir: downloadDir ?? this.downloadDir,
@@ -41,6 +45,7 @@ class AppSettings {
       telegramChatId: telegramChatId ?? this.telegramChatId,
       telegramUpload: telegramUpload ?? this.telegramUpload,
       fastMode: fastMode ?? this.fastMode,
+      initialized: initialized ?? this.initialized,
     );
   }
 
@@ -65,11 +70,12 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   @override
   AppSettings build() {
-    Future<void>.microtask(_load);
+    _load();
     return const AppSettings(
       downloadDir: defaultDir,
       defaultFormat: DefaultFormat.auto,
       concurrentDownloads: 3,
+      initialized: false,
     );
   }
 
@@ -98,9 +104,17 @@ class SettingsNotifier extends Notifier<AppSettings> {
         telegramChatId: prefs.getString(_telegramChatIdKey) ?? '',
         telegramUpload: prefs.getBool(_telegramUploadKey) ?? false,
         fastMode: prefs.getBool(_fastModeKey) ?? false,
+        initialized: true,
       );
     } catch (e) {
-      // Silently fail or use defaults if error
+      state = state.copyWith(initialized: true);
+    }
+  }
+
+  Future<void> waitForLoad() async {
+    if (state.initialized) return;
+    while (!state.initialized) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
     }
   }
 

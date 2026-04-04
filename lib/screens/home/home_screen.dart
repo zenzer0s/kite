@@ -68,23 +68,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     final isAuto = ref.read(settingsProvider).defaultFormat == DefaultFormat.auto;
 
-    if (!isAuto) {
-      setState(() {
-        _isSheetOpen = true;
-      });
-    }
-    
-    final info = await ref.read(downloadProvider.notifier).fetchInfo(url);
-    if (info == null) {
-      if (!isAuto && mounted) {
-        setState(() {
-          _isSheetOpen = false;
-        });
-      }
-      return;
-    }
-
     if (isAuto) {
+      final info = await ref.read(downloadProvider.notifier).fetchInfo(url);
+      if (info == null) return;
       HapticFeedback.mediumImpact();
       ref.read(downloadsProvider.notifier).startDownload(
             info: info,
@@ -93,13 +79,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       if (mounted) _urlController.clear();
       ref.read(downloadProvider.notifier).reset();
     } else {
+      // Trigger fetch in background
+      ref.read(downloadProvider.notifier).fetchInfo(url);
+      
+      // Open sheet instantly!
+      setState(() => _isSheetOpen = true);
       await showModalBottomSheet(
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         barrierColor: Colors.black.withValues(alpha: 0.5),
         transitionAnimationController: _sheetCtrl,
-        builder: (context) => MediaBottomSheet(onDownload: _startDownload),
+        builder: (context) => MediaBottomSheet(
+          isTransparentOverlay: false,
+          onDownload: _startDownload,
+        ),
       ).then((_) {
         if (mounted) {
           setState(() {

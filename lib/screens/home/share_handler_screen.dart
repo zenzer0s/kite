@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/download_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../widgets/expressive_loading.dart';
 import 'media_bottom_sheet.dart';
 
 class ShareHandlerScreen extends ConsumerStatefulWidget {
@@ -30,6 +31,8 @@ class _ShareHandlerScreenState extends ConsumerState<ShareHandlerScreen> {
         const platform = MethodChannel('com.zenzer0s.kite/downloader');
         platform.invokeMethod('makeTouchable');
 
+        // Wait for settings to be loaded from disk
+        await ref.read(settingsProvider.notifier).waitForLoad();
         final settings = ref.read(settingsProvider);
         final isAuto = settings.defaultFormat == DefaultFormat.auto;
 
@@ -45,57 +48,53 @@ class _ShareHandlerScreenState extends ConsumerState<ShareHandlerScreen> {
           _minimizeApp();
         } else {
           if (!mounted) return;
-          final info = await ref.read(downloadProvider.notifier).fetchInfo(url);
-          if (info == null) {
-             _minimizeApp();
-             return;
-          }
           
-          if (!mounted) return;
-          if (!mounted) return;
+          // Trigger fetch in background to populate downloadProvider
+          ref.read(downloadProvider.notifier).fetchInfo(url);
+          
+          // OPEN BOTTOM SHEET INSTANTLY (It will show expressive loading while info is null)
           await showModalBottomSheet(
             context: context,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
-            barrierColor: Colors.black.withValues(alpha: 0.5),
-            builder: (sheetContext) => MediaBottomSheet(
+            builder: (ctx) => MediaBottomSheet(
               isTransparentOverlay: true,
               onDownload: ({required bool audioOnly, String? formatId}) {
-                // Pop the sheet FIRST so the await completes
-                Navigator.of(sheetContext).pop();
-                ref.read(downloadsProvider.notifier).startDownload(
-                      info: info,
-                      audioOnly: audioOnly,
-                      formatId: formatId,
-                    );
+                final info = ref.read(downloadProvider).info;
+                if (info != null) {
+                  ref.read(downloadsProvider.notifier).startDownload(
+                        info: info,
+                        audioOnly: audioOnly,
+                        formatId: formatId,
+                      );
+                }
+                Navigator.pop(ctx);
               },
             ),
-          );
-          _minimizeApp();
+          ).whenComplete(() {
+            // If user dismissed without downloading, minimize
+            _minimizeApp();
+          });
         }
-      } else {
-        _minimizeApp();
       }
     });
   }
 
   void _minimizeApp() {
-    if (mounted) {
-      setState(() => _isGhosting = true);
-    }
+    if (!mounted) return;
+    setState(() => _isGhosting = true);
     const platform = MethodChannel('com.zenzer0s.kite/downloader');
     platform.invokeMethod('minimize');
-    platform.invokeMethod('makeUntouchable');
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isGhosting) return const SizedBox.shrink();
     
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Center(
-        child: CircularProgressIndicator(),
+      body: const Center(
+        child: ExpressiveLoadingIndicator(),
       ),
     );
   }

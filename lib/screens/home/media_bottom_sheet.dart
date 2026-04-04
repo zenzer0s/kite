@@ -6,12 +6,17 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../providers/download_provider.dart';
 import '../../services/download_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/expressive_loading.dart';
 
 class MediaBottomSheet extends ConsumerWidget {
   final void Function({required bool audioOnly, String? formatId}) onDownload;
   final bool isTransparentOverlay;
 
-  const MediaBottomSheet({super.key, required this.onDownload, this.isTransparentOverlay = false});
+  const MediaBottomSheet({
+    super.key,
+    required this.onDownload,
+    this.isTransparentOverlay = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -65,102 +70,45 @@ class MediaBottomSheet extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 20),
-            Flexible(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 380),
-                switchInCurve: Curves.easeOutCubic,
-                switchOutCurve: Curves.easeIn,
-                transitionBuilder: (child, anim) {
-                  return FadeTransition(
-                    opacity: anim,
-                    child: SlideTransition(
-                      position:
-                          Tween<Offset>(
-                            begin: const Offset(0, 0.06),
-                            end: Offset.zero,
-                          ).animate(
-                            CurvedAnimation(
-                              parent: anim,
-                              curve: Curves.easeOutCubic,
-                            ),
-                          ),
-                      child: ScaleTransition(
-                        scale: Tween<double>(begin: 0.96, end: 1.0).animate(
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 380),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeIn,
+              transitionBuilder: (child, anim) {
+                return FadeTransition(
+                  opacity: anim,
+                  child: SlideTransition(
+                    position:
+                        Tween<Offset>(
+                          begin: const Offset(0, 0.06),
+                          end: Offset.zero,
+                        ).animate(
                           CurvedAnimation(
                             parent: anim,
                             curve: Curves.easeOutCubic,
                           ),
                         ),
-                        alignment: Alignment.topCenter,
-                        child: child,
+                    child: child,
+                  ),
+                );
+              },
+              child: isLoading
+                  ? const Padding(
+                      key: ValueKey('loading'),
+                      padding: EdgeInsets.symmetric(vertical: 80.0),
+                      child: ExpressiveLoadingIndicator(),
+                    )
+                  : SingleChildScrollView(
+                      key: const ValueKey('data'),
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                      child: _DataState(
+                        info: dl.info!,
+                        onDownload: onDownload,
+                        isTransparentOverlay: isTransparentOverlay,
                       ),
                     ),
-                  );
-                },
-                child: isLoading
-                    ? KeyedSubtree(
-                        key: const ValueKey('loading'),
-                        child: _ContainedLoadingIndicator(isTransparentOverlay: isTransparentOverlay),
-                      )
-                    : SingleChildScrollView(
-                        key: const ValueKey('data'),
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-                        child: _DataState(
-                          info: dl.info!,
-                          onDownload: onDownload,
-                          isTransparentOverlay: isTransparentOverlay,
-                        ),
-                      ),
-              ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ContainedLoadingIndicator extends StatelessWidget {
-  final bool isTransparentOverlay;
-  const _ContainedLoadingIndicator({this.isTransparentOverlay = false});
-
-  @override
-  Widget build(BuildContext context) {
-    if (Theme.of(context).platform == TargetPlatform.android && !isTransparentOverlay) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 80.0),
-          child: SizedBox(
-            width: 100,
-            height: 100,
-            child: AndroidView(
-              viewType: 'com.zenzer0s.kite/expressive_loading',
-              creationParamsCodec: const StandardMessageCodec(),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Fallback for non-Android
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 80.0),
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: SizedBox(
-            width: 36,
-            height: 36,
-            child: CircularProgressIndicator(
-              strokeWidth: 4,
-              strokeCap: StrokeCap.round,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
         ),
       ),
     );
@@ -172,7 +120,11 @@ class _DataState extends StatelessWidget {
   final void Function({required bool audioOnly, String? formatId}) onDownload;
   final bool isTransparentOverlay;
 
-  const _DataState({required this.info, required this.onDownload, this.isTransparentOverlay = false});
+  const _DataState({
+    required this.info,
+    required this.onDownload,
+    this.isTransparentOverlay = false,
+  });
 
   static double _effectiveHeight(VideoFormat f) {
     if ((f.height ?? 0) > 0) return f.height!;
@@ -500,64 +452,8 @@ class _DataState extends StatelessWidget {
                   )
                   .toList(),
             ),
-            const SizedBox(height: 24),
           ],
-        ] else ...[
-          _FormatGroup(
-            title: 'VIDEO OPTIONS',
-            children: [
-              _FormatItem(
-                icon: Icons.videocam_rounded,
-                iconBg: Theme.of(context).colorScheme.primaryContainer,
-                iconColor: Theme.of(context).colorScheme.onPrimaryContainer,
-                title: 'Best Video + Audio',
-                subtitle: 'MP4 • Best available quality',
-                onTap: () => onDownload(audioOnly: false),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          _FormatGroup(
-            title: 'AUDIO ONLY',
-            children: [
-              _FormatItem(
-                icon: Icons.music_note_rounded,
-                iconBg: Theme.of(context).colorScheme.tertiaryContainer,
-                iconColor: Theme.of(context).colorScheme.tertiary,
-                title: 'Best Audio',
-                subtitle: 'MP3 Format',
-                onTap: () => onDownload(audioOnly: true),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
         ],
-
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: context.zc.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: context.zc.border),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.link_rounded, color: context.zc.textDim, size: 18),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  info.url,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.chakraPetch(
-                    fontSize: 12,
-                    color: context.zc.textMuted,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -698,10 +594,10 @@ String _formatFileSize(double bytes) {
     return '';
   }
   if (bytes < 1024 * 1024) {
-    return '${(bytes / 1024).toStringAsFixed(0)}KB';
+    return '${(bytes / 1024).toStringAsFixed(1)} KB';
   }
   if (bytes < 1024 * 1024 * 1024) {
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
-  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)}GB';
+  return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
 }
