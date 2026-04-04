@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/download_service.dart';
 import '../services/telegram_service.dart';
+import 'database_provider.dart';
 import 'settings_provider.dart';
 
 enum DownloadStatus { idle, fetching, downloading, paused, done, error }
@@ -163,7 +164,8 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
         if (_savedTaskIds.add(p.taskId)) {
           debugPrint('Kite: Native already saved to history. Triggering Telegram...');
           await _maybeUploadToTelegram(task);
-          debugPrint('Kite: Telegram finished.');
+          debugPrint('Kite: Telegram finished. Refreshing database stream...');
+          ref.invalidate(downloadHistoryProvider);
         }
         
         // Only set status to done if it wasn't already set to error by the Telegram uploader

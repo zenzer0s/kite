@@ -209,6 +209,10 @@ class DownloadService {
     await _method.invokeMethod('resumeDownload', {'taskId': taskId});
   }
 
+  static Future<void> openFile(String path) async {
+    await _method.invokeMethod('openFile', {'path': path});
+  }
+
   static Future<String> updateYtDlp() async {
     final status = await _method.invokeMethod<String>('updateYtDlp');
     return status ?? 'ALREADY_UP_TO_DATE';

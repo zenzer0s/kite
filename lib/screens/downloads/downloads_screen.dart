@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../database/app_database.dart';
 import '../../providers/database_provider.dart';
+import '../../services/download_service.dart';
 import '../settings/settings_screen.dart';
 
 enum _Filter { all, video, audio }
@@ -39,14 +40,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Force refresh database stream when app resumes (in case another engine wrote to the DB)
-      ref.invalidate(downloadsProvider);
+      ref.invalidate(downloadHistoryProvider);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final downloadsAsync = ref.watch(downloadsProvider);
+    final downloadsAsync = ref.watch(downloadHistoryProvider);
 
     return Scaffold(
       backgroundColor: cs.surface,
@@ -412,8 +413,16 @@ class _DownloadCard extends StatelessWidget {
         ),
       ),
       child: InkWell(
-        onTap: () {},
-        borderRadius: BorderRadius.circular(16),
+        onTap: () {
+          DownloadService.openFile(item.filePath).catchError((e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Could not open file: $e')),
+              );
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(20),
         child: Container(
           decoration: BoxDecoration(
             color: cs.surfaceContainerHigh,

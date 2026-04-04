@@ -346,6 +346,25 @@ open class MainActivity : FlutterFragmentActivity() {
                         }
                         result.success(true)
                     }
+                    
+                    "openFile" -> {
+                        val path = call.argument<String>("path") ?: return@setMethodCallHandler result.error("INVALID", "path required", null)
+                        val file = File(path)
+                        if (!file.exists()) return@setMethodCallHandler result.error("NOT_FOUND", "file does not exist", null)
+                        
+                        try {
+                            val uri = androidx.core.content.FileProvider.getUriForFile(applicationContext, "${packageName}.fileprovider", file)
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, applicationContext.contentResolver.getType(uri))
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(intent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("OPEN_ERROR", e.message, null)
+                        }
+                    }
 
                     else -> result.notImplemented()
                 }

@@ -7,6 +7,6 @@ final databaseProvider = Provider<AppDatabase>((ref) {
   return db;
 });
 
-final downloadsProvider = StreamProvider<List<DownloadedItem>>((ref) {
+final downloadHistoryProvider = StreamProvider<List<DownloadedItem>>((ref) {
   return ref.watch(databaseProvider).watchAllDownloads();
 });
