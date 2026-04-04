@@ -192,6 +192,8 @@ open class MainActivity : FlutterFragmentActivity() {
                                     val requestStartedAt = SystemClock.elapsedRealtime()
                                     val req = YoutubeDLRequest(url).apply {
                                         addOption("-o", "$outputDir/%(title)s.%(ext)s")
+                                        addOption("--downloader", "aria2c")
+                                        addOption("--downloader-args", "aria2c:\"-x 16 -k 1M\"")
                                         addOption("--no-playlist")
                                         addOption("-R", "1")
                                         addOption("--socket-timeout", "5")
