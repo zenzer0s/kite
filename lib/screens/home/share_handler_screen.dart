@@ -37,21 +37,22 @@ class _ShareHandlerScreenState extends ConsumerState<ShareHandlerScreen> {
         final isAuto = settings.defaultFormat == DefaultFormat.auto;
 
         if (isAuto) {
+          HapticFeedback.lightImpact();
+          _minimizeApp();
           final info = await ref.read(downloadProvider.notifier).fetchInfo(url);
           if (info != null) {
             HapticFeedback.mediumImpact();
-            ref.read(downloadsProvider.notifier).startDownload(
-                  info: info,
-                  audioOnly: false,
-                );
+            // Start download natively
+            ref
+                .read(downloadsProvider.notifier)
+                .startDownload(info: info, audioOnly: false);
           }
-          _minimizeApp();
         } else {
           if (!mounted) return;
-          
+
           // Trigger fetch in background to populate downloadProvider
           ref.read(downloadProvider.notifier).fetchInfo(url);
-          
+
           // OPEN BOTTOM SHEET INSTANTLY (It will show expressive loading while info is null)
           await showModalBottomSheet(
             context: context,
@@ -62,7 +63,9 @@ class _ShareHandlerScreenState extends ConsumerState<ShareHandlerScreen> {
               onDownload: ({required bool audioOnly, String? formatId}) {
                 final info = ref.read(downloadProvider).info;
                 if (info != null) {
-                  ref.read(downloadsProvider.notifier).startDownload(
+                  ref
+                      .read(downloadsProvider.notifier)
+                      .startDownload(
                         info: info,
                         audioOnly: audioOnly,
                         formatId: formatId,
@@ -90,12 +93,10 @@ class _ShareHandlerScreenState extends ConsumerState<ShareHandlerScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isGhosting) return const SizedBox.shrink();
-    
+
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: const Center(
-        child: ExpressiveLoadingIndicator(),
-      ),
+      body: const Center(child: ExpressiveLoadingIndicator()),
     );
   }
 }

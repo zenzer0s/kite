@@ -19,8 +19,29 @@ class DownloadsScreen extends ConsumerStatefulWidget {
   ConsumerState<DownloadsScreen> createState() => _DownloadsScreenState();
 }
 
-class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
+class _DownloadsScreenState extends ConsumerState<DownloadsScreen>
+    with WidgetsBindingObserver {
   _Filter _filter = _Filter.all;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Force refresh database stream when app resumes (in case another engine wrote to the DB)
+      ref.invalidate(downloadsProvider);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

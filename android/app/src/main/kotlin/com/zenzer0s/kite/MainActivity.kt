@@ -7,7 +7,7 @@ import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
 import android.util.Log
-import io.flutter.embedding.android.FlutterFragmentActivity
+import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -30,7 +30,7 @@ import java.util.concurrent.CancellationException
 import com.zenzer0s.kite.expressive.ExpressiveLoadingViewFactory
 import com.zenzer0s.kite.expressive.ExpressiveQuickActionsViewFactory
 
-open class MainActivity : FlutterFragmentActivity() {
+open class MainActivity : FlutterActivity() {
 
     companion object {
         const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
@@ -54,6 +54,15 @@ open class MainActivity : FlutterFragmentActivity() {
     private var ytDlpReady = false
     private val ytDlpPrefs by lazy {
         applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
     }
 
     override fun getRenderMode(): RenderMode {
@@ -191,6 +200,16 @@ open class MainActivity : FlutterFragmentActivity() {
 
                         val taskId = System.currentTimeMillis().toString()
                         Log.d("KiteMain", "startDownload taskId=$taskId audioOnly=$audioOnly formatId=$formatId url=$url")
+                        
+                        val notificationId = taskId.hashCode()
+                        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                        val notificationBuilder = androidx.core.app.NotificationCompat.Builder(applicationContext, KiteApp.DOWNLOAD_CHANNEL_ID)
+                            .setSmallIcon(android.R.drawable.stat_sys_download)
+                            .setContentTitle("Downloading...")
+                            .setContentText(url)
+                            .setOngoing(true)
+                            .setOnlyAlertOnce(true)
+
                         val job = sharedScope.launch {
                             try {
                                 withContext(Dispatchers.IO) { ensureInit() }
@@ -243,6 +262,11 @@ open class MainActivity : FlutterFragmentActivity() {
                                             lastEmitAt = now
                                             lastProgress = progressValue
                                             lastLine = line
+                                            
+                                            notificationBuilder.setProgress(100, progressValue.toInt(), false)
+                                            notificationBuilder.setContentText(line)
+                                            notificationManager.notify(notificationId, notificationBuilder.build())
+                                            
                                             sharedScope.launch {
                                                 globalProgressSink?.success(mapOf(
                                                     "taskId" to taskId,
@@ -259,14 +283,26 @@ open class MainActivity : FlutterFragmentActivity() {
                                 }
                                 if (!canceledTaskIds.contains(taskId)) {
                                     globalProgressSink?.success(mapOf("taskId" to taskId, "progress" to 100.0, "done" to true))
+                                    notificationBuilder.setContentTitle("Download Complete")
+                                        .setContentText("Finished downloading")
+                                        .setProgress(0, 0, false)
+                                        .setOngoing(false)
+                                    notificationManager.notify(notificationId, notificationBuilder.build())
                                 }
-                            } catch (e: CancellationException) {
+                            } catch (e: kotlinx.coroutines.CancellationException) {
                                 Log.d("KiteMain", "startDownload: canceled taskId=$taskId")
+                                notificationManager.cancel(notificationId)
                             } catch (e: Exception) {
                                 if (canceledTaskIds.contains(taskId)) {
                                     Log.d("KiteMain", "startDownload: canceled during execute taskId=$taskId message=${e.message}")
+                                    notificationManager.cancel(notificationId)
                                 } else {
                                     globalProgressSink?.success(mapOf("taskId" to taskId, "error" to (e.message ?: "Download failed")))
+                                    notificationBuilder.setContentTitle("Download Failed")
+                                        .setContentText(e.message ?: "Unknown error")
+                                        .setProgress(0, 0, false)
+                                        .setOngoing(false)
+                                    notificationManager.notify(notificationId, notificationBuilder.build())
                                 }
                             } finally {
                                 activeJobs.remove(taskId)

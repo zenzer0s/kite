@@ -12,7 +12,7 @@ class AppSettings {
   final String telegramBotToken;
   final String telegramChatId;
   final bool telegramUpload;
-  
+
   final bool fastMode;
   final bool initialized;
 
@@ -82,18 +82,22 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      
+
       // Load and parse default format safely
-      DefaultFormat format;
+      DefaultFormat format = DefaultFormat.auto;
       final formatStr = prefs.getString(_formatKey);
-      if (formatStr == 'custom') {
-        format = DefaultFormat.custom;
-      } else if (formatStr == 'auto') {
-        format = DefaultFormat.auto;
+      if (formatStr != null) {
+        if (formatStr.contains('custom')) {
+          format = DefaultFormat.custom;
+        } else if (formatStr.contains('auto')) {
+          format = DefaultFormat.auto;
+        }
       } else {
         // Fallback for legacy int storage
         final legacyInt = prefs.getInt(_formatKey);
-        format = legacyInt == 1 ? DefaultFormat.custom : DefaultFormat.auto;
+        if (legacyInt == 1) {
+          format = DefaultFormat.custom;
+        }
       }
 
       state = AppSettings(
@@ -131,7 +135,10 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
   Future<void> setDefaultFormat(DefaultFormat format) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_formatKey, format.name); // Using name (auto/custom) for better stability
+    await prefs.setString(
+      _formatKey,
+      format.name,
+    ); // Using name (auto/custom) for better stability
     state = state.copyWith(defaultFormat: format);
   }
 
