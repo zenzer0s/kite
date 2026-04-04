@@ -8,6 +8,7 @@ import android.system.Os
 import android.system.OsConstants
 import android.util.Log
 import io.flutter.embedding.android.FlutterFragmentActivity
+import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -16,7 +17,9 @@ import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -37,19 +40,24 @@ open class MainActivity : FlutterFragmentActivity() {
         private const val PREF_VERSION_KEY = "yt_dlp_version"
         private const val DOWNLOAD_PROGRESS_INTERVAL_MS = 200L
         private const val CONCURRENT_FRAGMENTS = "8"
+
+        val sharedScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+        val activeJobs = mutableMapOf<String, Job>()
+        val canceledTaskIds = mutableSetOf<String>()
+        val pausedTaskIds = mutableSetOf<String>()
+        var globalProgressSink: EventChannel.EventSink? = null
     }
 
-    private val scope = CoroutineScope(Dispatchers.Main + Job())
-    private val activeJobs = mutableMapOf<String, Job>()
-    private val canceledTaskIds = mutableSetOf<String>()
-    private val pausedTaskIds = mutableSetOf<String>()
-    private var progressSink: EventChannel.EventSink? = null
     private var shareSink: EventChannel.EventSink? = null
     private var pendingSharedUrl: String? = null
     private val initMutex = Mutex()
     private var ytDlpReady = false
     private val ytDlpPrefs by lazy {
         applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    }
+
+    override fun getRenderMode(): RenderMode {
+        return RenderMode.texture
     }
 
     private fun getProcessPid(process: Process): Int {
@@ -112,10 +120,10 @@ open class MainActivity : FlutterFragmentActivity() {
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
-                    progressSink = sink
+                    globalProgressSink = sink
                 }
                 override fun onCancel(arguments: Any?) {
-                    progressSink = null
+                    globalProgressSink = null
                 }
             })
 
@@ -139,7 +147,7 @@ open class MainActivity : FlutterFragmentActivity() {
                     "fetchInfo" -> {
                         val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
                         Log.d("KiteMain", "fetchInfo called url=$url")
-                        scope.launch {
+                        sharedScope.launch {
                             try {
                                 withContext(Dispatchers.IO) { ensureInit() }
                                 Log.d("KiteMain", "fetchInfo: ready, fetching")
@@ -183,7 +191,7 @@ open class MainActivity : FlutterFragmentActivity() {
 
                         val taskId = System.currentTimeMillis().toString()
                         Log.d("KiteMain", "startDownload taskId=$taskId audioOnly=$audioOnly formatId=$formatId url=$url")
-                        val job = scope.launch {
+                        val job = sharedScope.launch {
                             try {
                                 withContext(Dispatchers.IO) { ensureInit() }
                                 Log.d("KiteMain", "startDownload: ready, executing")
@@ -235,8 +243,8 @@ open class MainActivity : FlutterFragmentActivity() {
                                             lastEmitAt = now
                                             lastProgress = progressValue
                                             lastLine = line
-                                            scope.launch {
-                                                progressSink?.success(mapOf(
+                                            sharedScope.launch {
+                                                globalProgressSink?.success(mapOf(
                                                     "taskId" to taskId,
                                                     "progress" to progressValue,
                                                     "line" to line,
@@ -250,7 +258,7 @@ open class MainActivity : FlutterFragmentActivity() {
                                     )
                                 }
                                 if (!canceledTaskIds.contains(taskId)) {
-                                    progressSink?.success(mapOf("taskId" to taskId, "progress" to 100.0, "done" to true))
+                                    globalProgressSink?.success(mapOf("taskId" to taskId, "progress" to 100.0, "done" to true))
                                 }
                             } catch (e: CancellationException) {
                                 Log.d("KiteMain", "startDownload: canceled taskId=$taskId")
@@ -258,7 +266,7 @@ open class MainActivity : FlutterFragmentActivity() {
                                 if (canceledTaskIds.contains(taskId)) {
                                     Log.d("KiteMain", "startDownload: canceled during execute taskId=$taskId message=${e.message}")
                                 } else {
-                                    progressSink?.success(mapOf("taskId" to taskId, "error" to (e.message ?: "Download failed")))
+                                    globalProgressSink?.success(mapOf("taskId" to taskId, "error" to (e.message ?: "Download failed")))
                                 }
                             } finally {
                                 activeJobs.remove(taskId)
@@ -334,7 +342,7 @@ open class MainActivity : FlutterFragmentActivity() {
                     }
 
                     "updateYtDlp" -> {
-                        scope.launch {
+                        sharedScope.launch {
                             try {
                                 withContext(Dispatchers.IO) { ensureInit() }
                                 val status = withContext(Dispatchers.IO) {
@@ -353,7 +361,7 @@ open class MainActivity : FlutterFragmentActivity() {
                     }
 
                     "getYtDlpVersion" -> {
-                        scope.launch {
+                        sharedScope.launch {
                             try {
                                 withContext(Dispatchers.IO) { ensureInit() }
                                 val version = withContext(Dispatchers.IO) {
@@ -410,6 +418,17 @@ open class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        globalProgressSink = null
+        shareSink = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Do not cancel sharedScope here anymore, downloads should continue!
     }
 
     private fun extractSharedUrl(intent: Intent?): String? {
