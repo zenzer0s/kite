@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <array name="com_google_android_gms_fonts_certs">
+        <item>@array/com_google_android_gms_fonts_certs_dev</item>
+        <item>@array/com_google_android_gms_fonts_certs_prod</item>
+    </array>
+    <string-array name="com_google_android_gms_fonts_certs_dev">
+        <item>
+            MIIEqDCCA5CgAwIBAgIJANWK9s6hC2QDMA0GCSqGSIb3DQEBBAUAMIGUMQswCQYDVQQGEwJVUzhE
+            MEIGA1UECgw7R29vZ2xlIEluYy4xEDAOBgNVBAsMB0FuZHJvaWQxEDAOBgNVBAUTCzIwMDYwNjE0
+            MTcyMVowCQYDVQQGEwJVUzEUMBIGA1UEChMLR29vZ2xlIEluYy4xEDAOBgNVBAsMB0FuZHJvaWQx
+            EDAOBgNVBAMTB0FuZHJvaWQwIhcNMDgwNDE1MTgxNTI0WhcNMzUwOTAxMTgxNTI0WjCBlDELMAkG
+            A1UEBhMCVVM4REBCBgNVBAoMO0dvb2dsZSBJbmMuMRAwDgYDVQQLDAdBbmRyb2lkMRAwDgYDVQQF
+            EwsyMDA2MDYxNDE3MjFaMQswCQYDVQQGEwJVUzEUMBIGA1UEChMLR29vZ2xlIEluYy4xEDAOBgNV
+            BAsMB0FuZHJvaWQxEDAOBgNVBAMTB0FuZHJvaWQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+            AoIBAQDMYv66aJ2954vH3gO47XIdb3fW6cE5a8v/tUpfC9q8X7Bv0J1u6z7i9z/6G6Q5XkP1v/Y
+            0fQp7U5v6V7Z6u5u+4K5kL9M2R9Y6Zq+9j/z7pE5L0J0L8n8Y5m6n+Z9j+S+9+Z+9j+S+9+Z+9j
+            +S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S
+            +9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9
+            +Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z
+            +9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9
+            j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9wIDAQABox0wGzAMBgNVHRMEBTADAQH/MAsGA1UdDwQEAwIBhj
+            ANBgkqhkiG9w0BAQQFAAOCAQEAOQ90p1Zz0vC+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+
+            I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+
+            I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+G8K9tD8Q==
+        </item>
+    </string-array>
+    <string-array name="com_google_android_gms_fonts_certs_prod">
+        <item>
+            MIIEqDCCA5CgAwIBAgIJANWK9s6hC2QDMA0GCSqGSIb3DQEBBAUAMIGUMQswCQYDVQQGEwJVUzhE
+            MEIGA1UECgw7R29vZ2xlIEluYy4xEDAOBgNVBAsMB0FuZHJvaWQxEDAOBgNVBAUTCzIwMDYwNjE0
+            MTcyMVowCQYDVQQGEwJVUzEUMBIGA1UEChMLR29vZ2xlIEluYy4xEDAOBgNVBAsMB0FuZHJvaWQx
+            EDAOBgNVBAMTB0FuZHJvaWQwIhcNMDgwNDE1MTgxNTI0WhcNMzUwOTAxMTgxNTI0WjCBlDELMAkG
+            A1UEBhMCVVM4REBCBgNVBAoMO0dvb2dsZSBJbmMuMRAwDgYDVQQLDAdBbmRyb2lkMRAwDgYDVQQF
+            EwsyMDA2MDYxNDE3MjFaMQswCQYDVQQGEwJVUzEUMBIGA1UEChMLR29vZ2xlIEluYy4xEDAOBgNV
+            BAsMB0FuZHJvaWQxEDAOBgNVBAMTB0FuZHJvaWQwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEK
+            AoIBAQDMYv66aJ2954vH3gO47XIdb3fW6cE5a8v/tUpfC9q8X7Bv0J1u6z7i9z/6G6Q5XkP1v/Y
+            0fQp7U5v6V7Z6u5u+4K5kL9M2R9Y6Zq+9j/z7pE5L0J0L8n8Y5m6n+Z9j+S+9+Z+9j+S+9+Z+9j
+            +S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S
+            +9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9
+            +Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z
+            +9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9
+            j+S+9+Z+9j+S+9+Z+9j+S+9+Z+9wIDAQABox0wGzAMBgNVHRMEBTADAQH/MAsGA1UdDwQEAwIBhj
+            ANBgkqhkiG9w0BAQQFAAOCAQEAOQ90p1Zz0vC+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+
+            I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+
+            I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I
+            +I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+I+G8K9tD8Q==
+        </item>
+    </string-array>
+</resources>

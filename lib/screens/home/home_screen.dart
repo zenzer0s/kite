@@ -66,22 +66,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     _urlController.text = url;
     HapticFeedback.lightImpact();
 
-    final isAuto = ref.read(settingsProvider).defaultFormat == DefaultFormat.auto;
+    final isAuto =
+        ref.read(settingsProvider).defaultFormat == DefaultFormat.auto;
 
     if (isAuto) {
       final info = await ref.read(downloadProvider.notifier).fetchInfo(url);
       if (info == null) return;
       HapticFeedback.mediumImpact();
-      ref.read(downloadsProvider.notifier).startDownload(
-            info: info,
-            audioOnly: false,
-          );
+      ref
+          .read(downloadsProvider.notifier)
+          .startDownload(info: info, audioOnly: false);
       if (mounted) _urlController.clear();
       ref.read(downloadProvider.notifier).reset();
     } else {
       // Trigger fetch in background
       ref.read(downloadProvider.notifier).fetchInfo(url);
-      
+
       // Open sheet instantly!
       setState(() => _isSheetOpen = true);
       await showModalBottomSheet(
@@ -147,14 +147,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           final scale = 1.0 - 0.04 * t;
           final translateY = -24.0 * t;
           final radius = 32.0 * t;
-          return Transform(
-            alignment: Alignment.topCenter,
-            transform: Matrix4.identity()
-              ..translate(0.0, translateY)
-              ..scale(scale),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(radius),
-              child: child,
+          return Transform.translate(
+            offset: Offset(0.0, translateY),
+            child: Transform.scale(
+              alignment: Alignment.topCenter,
+              scale: scale,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(radius),
+                child: child,
+              ),
             ),
           );
         },

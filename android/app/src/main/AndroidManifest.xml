@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:label="Kite"
@@ -38,7 +40,7 @@
             android:excludeFromRecents="true"
             android:launchMode="singleInstance"
             android:exported="true"
-            android:taskAffinity=":share">
+            android:taskAffinity=":share_native">
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
@@ -51,6 +53,17 @@
                 <data android:scheme="https"/>
             </intent-filter>
         </activity>
+        <activity
+            android:name=".FlutterShareActivity"
+            android:theme="@style/Theme.Kite.Transparent"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:exported="false"
+            android:taskAffinity=":share" />
+        <service 
+            android:name=".DownloadService" 
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

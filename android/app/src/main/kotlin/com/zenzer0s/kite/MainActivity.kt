@@ -7,7 +7,7 @@ import android.os.SystemClock
 import android.system.Os
 import android.system.OsConstants
 import android.util.Log
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.android.RenderMode
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -27,10 +27,15 @@ import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.CancellationException
 
+import android.os.Bundle
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+
 import com.zenzer0s.kite.expressive.ExpressiveLoadingViewFactory
 import com.zenzer0s.kite.expressive.ExpressiveQuickActionsViewFactory
 
-open class MainActivity : FlutterActivity() {
+open class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
@@ -42,10 +47,7 @@ open class MainActivity : FlutterActivity() {
         private const val CONCURRENT_FRAGMENTS = "8"
 
         val sharedScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-        val activeJobs = mutableMapOf<String, Job>()
-        val canceledTaskIds = mutableSetOf<String>()
-        val pausedTaskIds = mutableSetOf<String>()
-        var globalProgressSink: EventChannel.EventSink? = null
+                                var globalProgressSink: EventChannel.EventSink? = null
     }
 
     private var shareSink: EventChannel.EventSink? = null
@@ -56,8 +58,14 @@ open class MainActivity : FlutterActivity() {
         applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Fix for ComposeView within Flutter "IllegalStateException: ViewTreeLifecycleOwner not found"
+        window.decorView.setViewTreeLifecycleOwner(this)
+        window.decorView.setViewTreeViewModelStoreOwner(this)
+        window.decorView.setViewTreeSavedStateRegistryOwner(this)
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
@@ -196,120 +204,8 @@ open class MainActivity : FlutterActivity() {
                         val outputDir = call.argument<String>("outputDir")
                             ?: File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kite").absolutePath
 
-                        File(outputDir).mkdirs()
-
                         val taskId = System.currentTimeMillis().toString()
-                        Log.d("KiteMain", "startDownload taskId=$taskId audioOnly=$audioOnly formatId=$formatId url=$url")
-                        
-                        val notificationId = taskId.hashCode()
-                        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                        val notificationBuilder = androidx.core.app.NotificationCompat.Builder(applicationContext, KiteApp.DOWNLOAD_CHANNEL_ID)
-                            .setSmallIcon(android.R.drawable.stat_sys_download)
-                            .setContentTitle("Downloading...")
-                            .setContentText(url)
-                            .setOngoing(true)
-                            .setOnlyAlertOnce(true)
-
-                        val job = sharedScope.launch {
-                            try {
-                                withContext(Dispatchers.IO) { ensureInit() }
-                                Log.d("KiteMain", "startDownload: ready, executing")
-                                withContext(Dispatchers.IO) {
-                                    val downloadStartedAt = SystemClock.elapsedRealtime()
-                                    val requestStartedAt = SystemClock.elapsedRealtime()
-                                    val req = YoutubeDLRequest(url).apply {
-                                        addOption("-o", "$outputDir/%(title)s.%(ext)s")
-                                        addOption("--downloader", "aria2c")
-                                        addOption("--downloader-args", "aria2c:\"-x 16 -k 1M\"")
-                                        addOption("--no-playlist")
-                                        addOption("-R", "1")
-                                        addOption("--socket-timeout", "5")
-                                        addOption("--concurrent-fragments", CONCURRENT_FRAGMENTS)
-                                        when {
-                                            audioOnly -> {
-                                                addOption("-x")
-                                                addOption("--audio-format", "mp3")
-                                            }
-                                            formatId != null -> {
-                                                addOption("-f", "$formatId+bestaudio[ext=m4a]/$formatId+bestaudio/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
-                                                addOption("--merge-output-format", "mp4")
-                                            }
-                                            else -> {
-                                                addOption("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best")
-                                                addOption("--merge-output-format", "mp4")
-                                            }
-                                        }
-                                    }
-                                    val requestBuiltAt = SystemClock.elapsedRealtime()
-                                    Log.d("KiteMain", "startDownload: request built in ${requestBuiltAt - requestStartedAt}ms")
-                                    var callbackCount = 0
-                                    var emittedCount = 0
-                                    var lastProgress = Double.NEGATIVE_INFINITY
-                                    var lastLine = ""
-                                    var lastEmitAt = 0L
-                                    YoutubeDL.getInstance().execute(req, taskId) { progress, _, line ->
-                                        callbackCount += 1
-                                        val now = SystemClock.elapsedRealtime()
-                                        val progressValue = progress.toDouble()
-                                        val shouldEmit =
-                                            emittedCount == 0 ||
-                                                progressValue >= 100.0 ||
-                                                progressValue - lastProgress >= 1.0 ||
-                                                line != lastLine ||
-                                                now - lastEmitAt >= DOWNLOAD_PROGRESS_INTERVAL_MS
-                                        if (shouldEmit) {
-                                            emittedCount += 1
-                                            lastEmitAt = now
-                                            lastProgress = progressValue
-                                            lastLine = line
-                                            
-                                            notificationBuilder.setProgress(100, progressValue.toInt(), false)
-                                            notificationBuilder.setContentText(line)
-                                            notificationManager.notify(notificationId, notificationBuilder.build())
-                                            
-                                            sharedScope.launch {
-                                                globalProgressSink?.success(mapOf(
-                                                    "taskId" to taskId,
-                                                    "progress" to progressValue,
-                                                    "line" to line,
-                                                ))
-                                            }
-                                        }
-                                    }
-                                    Log.d(
-                                        "KiteMain",
-                                        "startDownload: yt-dlp execute finished in ${SystemClock.elapsedRealtime() - requestBuiltAt}ms callbacks=$callbackCount emitted=$emittedCount total=${SystemClock.elapsedRealtime() - downloadStartedAt}ms"
-                                    )
-                                }
-                                if (!canceledTaskIds.contains(taskId)) {
-                                    globalProgressSink?.success(mapOf("taskId" to taskId, "progress" to 100.0, "done" to true))
-                                    notificationBuilder.setContentTitle("Download Complete")
-                                        .setContentText("Finished downloading")
-                                        .setProgress(0, 0, false)
-                                        .setOngoing(false)
-                                    notificationManager.notify(notificationId, notificationBuilder.build())
-                                }
-                            } catch (e: kotlinx.coroutines.CancellationException) {
-                                Log.d("KiteMain", "startDownload: canceled taskId=$taskId")
-                                notificationManager.cancel(notificationId)
-                            } catch (e: Exception) {
-                                if (canceledTaskIds.contains(taskId)) {
-                                    Log.d("KiteMain", "startDownload: canceled during execute taskId=$taskId message=${e.message}")
-                                    notificationManager.cancel(notificationId)
-                                } else {
-                                    globalProgressSink?.success(mapOf("taskId" to taskId, "error" to (e.message ?: "Download failed")))
-                                    notificationBuilder.setContentTitle("Download Failed")
-                                        .setContentText(e.message ?: "Unknown error")
-                                        .setProgress(0, 0, false)
-                                        .setOngoing(false)
-                                    notificationManager.notify(notificationId, notificationBuilder.build())
-                                }
-                            } finally {
-                                activeJobs.remove(taskId)
-                                canceledTaskIds.remove(taskId)
-                            }
-                        }
-                        activeJobs[taskId] = job
+                        DownloadService.startDownload(applicationContext, taskId, url, audioOnly, formatId, outputDir)
                         result.success(taskId)
                     }
 
@@ -321,7 +217,7 @@ open class MainActivity : FlutterActivity() {
                                 val pid = getProcessPid(process)
                                 if (pid != -1) {
                                     Os.kill(pid, OsConstants.SIGSTOP)
-                                    pausedTaskIds.add(taskId)
+                                    DownloadService.pausedTaskIds.add(taskId)
                                     result.success(true)
                                 } else {
                                     result.error("PAUSE_ERROR", "Could not get process PID", null)
@@ -342,7 +238,7 @@ open class MainActivity : FlutterActivity() {
                                 val pid = getProcessPid(process)
                                 if (pid != -1) {
                                     Os.kill(pid, OsConstants.SIGCONT)
-                                    pausedTaskIds.remove(taskId)
+                                    DownloadService.pausedTaskIds.remove(taskId)
                                     result.success(true)
                                 } else {
                                     result.error("RESUME_ERROR", "Could not get process PID", null)
@@ -358,21 +254,21 @@ open class MainActivity : FlutterActivity() {
                     "cancelDownload" -> {
                         val taskId = call.argument<String>("taskId") ?: return@setMethodCallHandler result.error("INVALID", "taskId required", null)
                         try {
-                            if (pausedTaskIds.contains(taskId)) {
+                            if (DownloadService.pausedTaskIds.contains(taskId)) {
                                 val process = getProcessFromMap(taskId)
                                 if (process != null) {
                                     val pid = getProcessPid(process)
                                     if (pid != -1) Os.kill(pid, OsConstants.SIGCONT)
                                 }
-                                pausedTaskIds.remove(taskId)
+                                DownloadService.pausedTaskIds.remove(taskId)
                             }
-                            canceledTaskIds.add(taskId)
-                            activeJobs[taskId]?.cancel(CancellationException("task canceled"))
+                            DownloadService.canceledTaskIds.add(taskId)
+                            DownloadService.activeJobs[taskId]?.cancel(CancellationException("task canceled"))
                             YoutubeDL.getInstance().destroyProcessById(taskId)
-                            activeJobs.remove(taskId)
+                            DownloadService.activeJobs.remove(taskId)
                             result.success(true)
                         } catch (e: Exception) {
-                            canceledTaskIds.remove(taskId)
+                            DownloadService.canceledTaskIds.remove(taskId)
                             result.error("CANCEL_ERROR", e.message, null)
                         }
                     }

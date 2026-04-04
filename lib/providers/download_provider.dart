@@ -1,12 +1,9 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../database/app_database.dart';
 import '../services/download_service.dart';
 import '../services/telegram_service.dart';
-import 'database_provider.dart';
 import 'settings_provider.dart';
 
 enum DownloadStatus { idle, fetching, downloading, paused, done, error }
@@ -130,8 +127,31 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
 
   void _listenProgress() {
     _progressSub = DownloadService.progressStream.listen((p) async {
-      final task = state[p.taskId];
-      if (task == null) return;
+      var task = state[p.taskId];
+      if (task == null) {
+        // If we don't know about this task (e.g. started via Share sheet), create it!
+        if (p.title != null) {
+          task = DownloadTask(
+            taskId: p.taskId,
+            info: VideoInfo(
+              id: '', // Not mission critical
+              title: p.title!,
+              uploader: p.uploader ?? 'Unknown',
+              thumbnail: p.thumbnail ?? '',
+              duration: p.duration ?? 0,
+              url: p.url ?? '',
+              ext: p.ext ?? 'mp4',
+            ),
+            targetExt: p.ext ?? 'mp4',
+            status: DownloadStatus.downloading,
+            progress: p.progress,
+            currentLine: p.line,
+          );
+          _update(p.taskId, task);
+        } else {
+          return; // Still don't have enough metadata
+        }
+      }
       if (p.error != null) {
         debugPrint('Kite: Download error from native: ${p.error}');
         _update(
@@ -141,8 +161,7 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
       } else if (p.done) {
         debugPrint('Kite: Download done native! Saving to history and Telegram: ${p.taskId}');
         if (_savedTaskIds.add(p.taskId)) {
-          await _saveToHistory(task);
-          debugPrint('Kite: History saved. Triggering Telegram...');
+          debugPrint('Kite: Native already saved to history. Triggering Telegram...');
           await _maybeUploadToTelegram(task);
           debugPrint('Kite: Telegram finished.');
         }
@@ -232,24 +251,6 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
     state = updated;
   }
 
-  Future<void> _saveToHistory(DownloadTask task) async {
-    final db = ref.read(databaseProvider);
-    final safeTitle = task.info.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final ext = task.targetExt ?? task.info.ext;
-    final filePath = '${task.outputDir}/$safeTitle.$ext';
-    await db.insertDownload(
-      DownloadedItemsCompanion(
-        title: Value(task.info.title),
-        uploader: Value(task.info.uploader),
-        url: Value(task.info.url),
-        thumbnail: Value(task.info.thumbnail),
-        filePath: Value(filePath),
-        ext: Value(ext),
-        duration: Value(task.info.duration),
-        downloadedAt: Value(DateTime.now()),
-      ),
-    );
-  }
 
   Future<void> _maybeUploadToTelegram(DownloadTask task) async {
     debugPrint('Kite: _maybeUploadToTelegram checking settings...');

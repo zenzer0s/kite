@@ -137,9 +137,7 @@ class SettingsScreen extends ConsumerWidget {
             _SettingsGroup(
               title: 'Advanced',
               cs: cs,
-              children: [
-                _BatteryOptimizationTile(cs: cs),
-              ],
+              children: [_BatteryOptimizationTile(cs: cs)],
             ),
             const SizedBox(height: 16),
             _SettingsGroup(
@@ -229,21 +227,33 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 16),
-                RadioListTile<DefaultFormat>(
-                  title: Text('Auto', style: GoogleFonts.outfit()),
-                  subtitle: Text('Instantly download the best video & audio', style: GoogleFonts.outfit(fontSize: 12)),
-                  value: DefaultFormat.auto,
+                RadioGroup<DefaultFormat>(
                   groupValue: settings.defaultFormat,
-                  onChanged: (v) => Navigator.pop(context, v),
-                  activeColor: cs.primary,
-                ),
-                RadioListTile<DefaultFormat>(
-                  title: Text('Custom', style: GoogleFonts.outfit()),
-                  subtitle: Text('Always pick quality and format from a list', style: GoogleFonts.outfit(fontSize: 12)),
-                  value: DefaultFormat.custom,
-                  groupValue: settings.defaultFormat,
-                  onChanged: (v) => Navigator.pop(context, v),
-                  activeColor: cs.primary,
+                  onChanged: (v) {
+                    if (v != null) Navigator.pop(context, v);
+                  },
+                  child: Column(
+                    children: [
+                      RadioListTile<DefaultFormat>(
+                        title: Text('Auto', style: GoogleFonts.outfit()),
+                        subtitle: Text(
+                          'Instantly download the best video & audio',
+                          style: GoogleFonts.outfit(fontSize: 12),
+                        ),
+                        value: DefaultFormat.auto,
+                        activeColor: cs.primary,
+                      ),
+                      RadioListTile<DefaultFormat>(
+                        title: Text('Custom', style: GoogleFonts.outfit()),
+                        subtitle: Text(
+                          'Always pick quality and format from a list',
+                          style: GoogleFonts.outfit(fontSize: 12),
+                        ),
+                        value: DefaultFormat.custom,
+                        activeColor: cs.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -460,7 +470,8 @@ class _BatteryOptimizationTile extends StatefulWidget {
   const _BatteryOptimizationTile({required this.cs});
 
   @override
-  State<_BatteryOptimizationTile> createState() => _BatteryOptimizationTileState();
+  State<_BatteryOptimizationTile> createState() =>
+      _BatteryOptimizationTileState();
 }
 
 class _BatteryOptimizationTileState extends State<_BatteryOptimizationTile> {
@@ -475,7 +486,9 @@ class _BatteryOptimizationTileState extends State<_BatteryOptimizationTile> {
 
   Future<void> _checkStatus() async {
     try {
-      final bool result = await platform.invokeMethod('isIgnoringBatteryOptimizations');
+      final bool result = await platform.invokeMethod(
+        'isIgnoringBatteryOptimizations',
+      );
       if (mounted) setState(() => _isIgnoring = result);
     } catch (_) {}
   }
@@ -492,8 +505,8 @@ class _BatteryOptimizationTileState extends State<_BatteryOptimizationTile> {
   Widget build(BuildContext context) {
     return _SettingsTile(
       title: 'Ignore Battery Optimizations',
-      subtitle: _isIgnoring 
-          ? 'Unrestricted background downloads' 
+      subtitle: _isIgnoring
+          ? 'Unrestricted background downloads'
           : 'Allow uninterrupted background downloads',
       icon: Icons.battery_charging_full_rounded,
       cs: widget.cs,

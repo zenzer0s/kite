@@ -94,6 +94,12 @@ class DownloadProgress {
   final String line;
   final bool done;
   final String? error;
+  final String? title;
+  final String? thumbnail;
+  final String? uploader;
+  final String? url;
+  final int? duration;
+  final String? ext;
 
   const DownloadProgress({
     required this.taskId,
@@ -101,6 +107,12 @@ class DownloadProgress {
     this.line = '',
     this.done = false,
     this.error,
+    this.title,
+    this.thumbnail,
+    this.uploader,
+    this.url,
+    this.duration,
+    this.ext,
   });
 
   factory DownloadProgress.fromMap(Map map) => DownloadProgress(
@@ -109,6 +121,12 @@ class DownloadProgress {
     line: map['line'] ?? '',
     done: map['done'] == true,
     error: map['error'] as String?,
+    title: map['title'] as String?,
+    thumbnail: map['thumbnail'] as String?,
+    uploader: map['uploader'] as String?,
+    url: map['url'] as String?,
+    duration: (map['duration'] as num?)?.toInt(),
+    ext: map['ext'] as String?,
   );
 }
 
@@ -173,8 +191,8 @@ class DownloadService {
     final taskId = await _method.invokeMethod<String>('startDownload', {
       'url': url,
       'audioOnly': audioOnly,
-      'formatId': ?formatId,
-      'outputDir': ?outputDir,
+      'formatId': formatId,
+      'outputDir': outputDir,
     });
     return taskId!;
   }
