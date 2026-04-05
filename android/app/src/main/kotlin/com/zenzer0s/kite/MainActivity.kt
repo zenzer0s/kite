@@ -13,19 +13,14 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.File
-import java.util.concurrent.CancellationException
 
 import android.os.Bundle
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -40,10 +35,8 @@ open class MainActivity : FlutterFragmentActivity() {
         const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
         const val EVENT_CHANNEL = "com.zenzer0s.kite/progress"
         const val SHARE_CHANNEL = "com.zenzer0s.kite/share"
-        private const val PREFS_NAME = "kite_ytdlp"
+        private const val PREFS_NAME = "FlutterSharedPreferences"
         private const val PREF_VERSION_KEY = "yt_dlp_version"
-        private const val DOWNLOAD_PROGRESS_INTERVAL_MS = 200L
-        private const val CONCURRENT_FRAGMENTS = "8"
 
         var globalProgressSink: EventChannel.EventSink? = null
         var shareSink: EventChannel.EventSink? = null

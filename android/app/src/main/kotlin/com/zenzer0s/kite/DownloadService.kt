@@ -4,7 +4,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.database.sqlite.SQLiteDatabase
 import android.os.Environment
 import android.os.IBinder
 import android.os.SystemClock
@@ -19,9 +18,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
-import java.io.FileInputStream
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.concurrent.CancellationException
 
 class DownloadService : Service() {
