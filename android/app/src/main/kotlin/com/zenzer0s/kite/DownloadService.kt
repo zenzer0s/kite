@@ -19,15 +19,21 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
+import java.io.FileInputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.CancellationException
 
 class DownloadService : Service() {
 
     companion object {
         private const val CONCURRENT_FRAGMENTS = "8"
-        val activeJobs = mutableMapOf<String, Job>()
-        val canceledTaskIds = mutableSetOf<String>()
-        val pausedTaskIds = mutableSetOf<String>()
+        private const val FOREGROUND_ID = 1001
+        var isForegroundStarted = false
+        
+        val activeJobs = java.util.concurrent.ConcurrentHashMap<String, Job>()
+        val canceledTaskIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+        val pausedTaskIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
         val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
         fun startDownload(context: Context, taskId: String, url: String, audioOnly: Boolean, formatId: String?, outputDir: String) {
@@ -56,44 +62,40 @@ class DownloadService : Service() {
 
         File(outputDir).mkdirs()
 
-        val notificationId = taskId.hashCode()
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        
+        // Ensure service anchor is started once
+        if (!isForegroundStarted) {
+            val anchor = NotificationCompat.Builder(this, KiteApp.DOWNLOAD_CHANNEL_ID)
+                .setContentTitle("Kite Manager")
+                .setContentText("Active background tasks")
+                .setSmallIcon(R.drawable.ic_download)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+            startForeground(FOREGROUND_ID, anchor)
+            isForegroundStarted = true
+        }
+
+        val notificationId = (taskId.hashCode() and 0x7FFFFFFF)
         val builder = NotificationCompat.Builder(this, KiteApp.DOWNLOAD_CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle("Initializing Download...")
-            .setContentText(url)
+            .setSmallIcon(R.drawable.ic_download)
+            .setContentTitle("Initializing...")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
 
-        startForeground(notificationId, builder.build())
+        notificationManager.notify(notificationId, builder.build())
 
         val job = serviceScope.launch {
             try {
                 KiteApp.awaitNativeToolsReady().getOrThrow()
 
-                val infoReq = YoutubeDLRequest(url).apply {
-                    addOption("--dump-single-json")
-                    addOption("--no-playlist")
-                    addOption("-R", "1")
-                    addOption("--socket-timeout", "5")
-                }
-                
-                val response = YoutubeDL.getInstance().execute(infoReq)
-                val infoText = response.out
-                var title = "Unknown Video"
-                var uploader = "Unknown"
-                var duration = 0
-                var parsedExt = "mp4"
-                var thumbnail = ""
-                
-                try {
-                    val jsonObj = JSONObject(infoText)
-                    title = jsonObj.optString("title", title)
-                    uploader = jsonObj.optString("uploader", uploader)
-                    duration = jsonObj.optInt("duration", 0)
-                    parsedExt = jsonObj.optString("ext", parsedExt)
-                    thumbnail = jsonObj.optString("thumbnail", "")
-                } catch (e: Exception) {}
+                val infoMap = KiteNative.fetchInfo(url)
+                val title = infoMap["title"] as? String ?: "Unknown Video"
+                val uploader = infoMap["uploader"] as? String ?: "Unknown"
+                val duration = infoMap["duration"] as? Int ?: 0
+                val parsedExt = infoMap["ext"] as? String ?: "mp4"
+                val thumbnail = infoMap["thumbnail"] as? String ?: ""
 
                 val ext = if (audioOnly) "mp3" else parsedExt
                 
@@ -129,22 +131,26 @@ class DownloadService : Service() {
                     val now = SystemClock.elapsedRealtime()
                     if (now - lastEmitAt >= 200L) {
                         lastEmitAt = now
+                        builder.setContentTitle(title)
                         builder.setProgress(100, progress.toInt(), false)
-                        builder.setContentText(line)
+                        builder.setContentText("${progress.toInt()}% • Downloading")
+                        builder.setSmallIcon(R.drawable.ic_download)
                         notificationManager.notify(notificationId, builder.build())
                         
-                        MainActivity.sharedScope.launch {
-                            MainActivity.globalProgressSink?.success(mapOf(
-                                "taskId" to taskId,
-                                "progress" to progress.toDouble(),
-                                "line" to line,
-                                "title" to title,
-                                "uploader" to uploader,
-                                "thumbnail" to thumbnail,
-                                "url" to url,
-                                "duration" to duration,
-                                "ext" to ext
-                            ))
+                        if (MainActivity.globalProgressSink != null) {
+                            MainActivity.sharedScope.launch {
+                                MainActivity.globalProgressSink?.success(mapOf(
+                                    "taskId" to taskId,
+                                    "progress" to progress.toDouble(),
+                                    "line" to line,
+                                    "title" to title,
+                                    "uploader" to uploader,
+                                    "thumbnail" to thumbnail,
+                                    "url" to url,
+                                    "duration" to duration,
+                                    "ext" to ext
+                                ))
+                            }
                         }
                     }
                 }
@@ -156,17 +162,26 @@ class DownloadService : Service() {
                         .setOngoing(false)
                     notificationManager.notify(notificationId, builder.build())
 
-                    val safeTitle = title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                    val filePath = "$outputDir/$safeTitle.$ext"
+                    val filePath = KiteNative.getSafeFilePath(outputDir, title, ext)
                     
                     // Always save natively to history.
-                    insertToDatabase(title, uploader, url, thumbnail, filePath, ext, duration)
+                    val meta = KiteNative.DownloadMetadata(title, uploader, url, thumbnail, filePath, ext, duration)
+                    KiteNative.saveToHistory(this@DownloadService, meta)
                     
-                    if (MainActivity.globalProgressSink != null) {
-                        MainActivity.sharedScope.launch {
-                            MainActivity.globalProgressSink?.success(mapOf("taskId" to taskId, "progress" to 100.0, "done" to true))
-                        }
-                    }
+                    // UI Sync
+                    MainActivity.notifyHistoryChanged()
+                    
+                    // Switch to Upload Icon
+                    builder.setContentText("Uploading to Telegram...")
+                    builder.setProgress(0, 0, true)
+                    builder.setSmallIcon(R.drawable.ic_upload)
+                    notificationManager.notify(notificationId, builder.build())
+
+                    // Trigger Telegram upload natively
+                    KiteNative.uploadToTelegram(this@DownloadService, filePath, ext)
+                    
+                    // Final Clean Notification
+                    notificationManager.cancel(notificationId)
                 }
             } catch (e: CancellationException) {
                 notificationManager.cancel(notificationId)
@@ -187,32 +202,14 @@ class DownloadService : Service() {
             } finally {
                 activeJobs.remove(taskId)
                 canceledTaskIds.remove(taskId)
-                if (activeJobs.isEmpty()) stopSelf()
+                if (activeJobs.isEmpty()) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    isForegroundStarted = false
+                    stopSelf()
+                }
             }
         }
         activeJobs[taskId] = job
         return START_NOT_STICKY
-    }
-
-    private fun insertToDatabase(title: String, uploader: String, url: String, thumbnail: String, filePath: String, ext: String, duration: Int) {
-        try {
-            val dbFile = File(this.filesDir, "../app_flutter/kite.sqlite").canonicalFile
-            if (!dbFile.exists()) return
-            val db = SQLiteDatabase.openDatabase(dbFile.absolutePath, null, SQLiteDatabase.OPEN_READWRITE)
-            val cv = android.content.ContentValues().apply {
-                put("title", title)
-                put("uploader", uploader)
-                put("url", url)
-                put("thumbnail", thumbnail)
-                put("file_path", filePath)
-                put("ext", ext)
-                put("duration", duration)
-                put("downloaded_at", System.currentTimeMillis() / 1000L)
-            }
-            db.insert("downloaded_items", null, cv)
-            db.close()
-        } catch (e: Exception) {
-            Log.e("KiteDB", "Failed to natively save history", e)
-        }
     }
 }

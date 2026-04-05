@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/services.dart';
 
 class VideoFormat {
@@ -100,6 +101,7 @@ class DownloadProgress {
   final String? url;
   final int? duration;
   final String? ext;
+  final bool nativeUploaded;
 
   const DownloadProgress({
     required this.taskId,
@@ -113,6 +115,7 @@ class DownloadProgress {
     this.url,
     this.duration,
     this.ext,
+    this.nativeUploaded = false,
   });
 
   factory DownloadProgress.fromMap(Map map) => DownloadProgress(
@@ -127,6 +130,7 @@ class DownloadProgress {
     url: map['url'] as String?,
     duration: (map['duration'] as num?)?.toInt(),
     ext: map['ext'] as String?,
+    nativeUploaded: map['nativeUploaded'] == true,
   );
 }
 
@@ -134,50 +138,29 @@ class DownloadService {
   static const _method = MethodChannel('com.zenzer0s.kite/downloader');
   static const _event = EventChannel('com.zenzer0s.kite/progress');
 
-  static String normalizeUrl(String url) {
-    final trimmed = url.trim();
-    final uri = Uri.tryParse(trimmed);
-    if (uri == null) {
-      return trimmed;
-    }
+  static final _syncController = StreamController<void>.broadcast();
+  static Stream<void> get syncStream => _syncController.stream;
 
-    final host = uri.host.toLowerCase();
-    if (host == 'youtu.be') {
-      final videoId = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
-      if (videoId.isEmpty) {
-        return trimmed;
+  static void init() {
+    _method.setMethodCallHandler((call) async {
+      if (call.method == 'onHistoryChanged') {
+        _syncController.add(null);
       }
-      final query = Map<String, String>.from(uri.queryParameters)..remove('si');
-      query['v'] = videoId;
-      return Uri(
-        scheme: uri.scheme.isEmpty ? 'https' : uri.scheme,
-        host: 'www.youtube.com',
-        path: '/watch',
-        queryParameters: query,
-      ).toString();
-    }
-
-    if (host == 'youtube.com' ||
-        host == 'www.youtube.com' ||
-        host == 'm.youtube.com') {
-      final query = Map<String, String>.from(uri.queryParameters);
-      if (query.remove('si') != null) {
-        return uri
-            .replace(queryParameters: query.isEmpty ? null : query)
-            .toString();
-      }
-    }
-
-    return trimmed;
+    });
   }
 
   static Stream<DownloadProgress> get progressStream => _event
       .receiveBroadcastStream()
       .map((e) => DownloadProgress.fromMap(e as Map));
 
+  static Future<String> normalizeUrl(String url) async {
+    final normalized = await _method.invokeMethod<String>('normalizeUrl', {'url': url});
+    return normalized ?? url;
+  }
+
   static Future<VideoInfo> fetchInfo(String url) async {
     final result = await _method.invokeMapMethod<String, dynamic>('fetchInfo', {
-      'url': normalizeUrl(url),
+      'url': url,
     });
     return VideoInfo.fromMap(result!);
   }
@@ -207,6 +190,21 @@ class DownloadService {
 
   static Future<void> resumeDownload(String taskId) async {
     await _method.invokeMethod('resumeDownload', {'taskId': taskId});
+  }
+
+  static Future<void> deleteHistoryItem(int id) async {
+    await _method.invokeMethod('deleteHistoryItem', {'id': id});
+  }
+
+  static Future<Map<String, dynamic>> testTelegramConnection({
+    required String token,
+    required String chatId,
+  }) async {
+    final result = await _method.invokeMapMethod<String, dynamic>(
+      'testTelegramConnection',
+      {'token': token, 'chatId': chatId},
+    );
+    return result ?? {'success': false, 'error': 'Unknown error'};
   }
 
   static Future<void> openFile(String path) async {

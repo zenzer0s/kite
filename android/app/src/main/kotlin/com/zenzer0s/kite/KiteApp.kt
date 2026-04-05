@@ -44,19 +44,32 @@ class KiteApp : Application() {
         }
         val startedAt = System.currentTimeMillis()
         appScope.launch(Dispatchers.IO) {
-            val result = runCatching {
-                YoutubeDL.init(this@KiteApp)
-                FFmpeg.init(this@KiteApp)
-                Aria2c.init(this@KiteApp)
+            val resYoutube = launch {
+                val s = System.currentTimeMillis()
+                runCatching { YoutubeDL.init(this@KiteApp) }
+                Log.d("KiteApp", "YoutubeDL init took ${System.currentTimeMillis() - s}ms")
             }
-            result
-                .onSuccess {
-                    Log.d("KiteApp", "Native tools initialized in ${System.currentTimeMillis() - startedAt}ms")
-                }
-                .onFailure {
-                    Log.e("KiteApp", "Native init failed: ${it.message}")
-                }
-            nativeInitResult.complete(result)
+            val resFFmpeg = launch {
+                val s = System.currentTimeMillis()
+                runCatching { FFmpeg.init(this@KiteApp) }
+                Log.d("KiteApp", "FFmpeg init took ${System.currentTimeMillis() - s}ms")
+            }
+            val resAria2c = launch {
+                val s = System.currentTimeMillis()
+                runCatching { Aria2c.init(this@KiteApp) }
+                Log.d("KiteApp", "Aria2c init took ${System.currentTimeMillis() - s}ms")
+            }
+
+            // Wait for all to finish for the overall global readiness state
+            resYoutube.join()
+            resFFmpeg.join()
+            resAria2c.join()
+            
+            Log.d("KiteApp", "TOTAL Native tools ready in ${System.currentTimeMillis() - startedAt}ms")
+            nativeInitResult.complete(Result.success(Unit))
+
+            // Now pre-warm the Python interpreter in the background
+            launch { KiteNative.warmup() }
         }
     }
 

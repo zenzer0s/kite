@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/settings_provider.dart';
-import '../../services/telegram_service.dart';
+import '../../services/download_service.dart';
 
 class TelegramSettingsScreen extends ConsumerStatefulWidget {
   const TelegramSettingsScreen({super.key});
@@ -211,21 +211,22 @@ class _TelegramSettingsScreenState
     HapticFeedback.mediumImpact();
     setState(() => _isTesting = true);
     try {
-      final result = await TelegramService.testConnection(
+      final res = await DownloadService.testTelegramConnection(
         token: settings.telegramBotToken,
         chatId: settings.telegramChatId,
       );
       if (!context.mounted) return;
+      final success = res['success'] == true;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result.isSuccess
+            success
                 ? '✅ Connected! Check your Telegram.'
-                : '❌ ${result.error}',
+                : '❌ ${res['error'] ?? 'Connection failed'}',
           ),
           behavior: SnackBarBehavior.floating,
           backgroundColor:
-              result.isSuccess ? Colors.green.shade700 : Colors.red.shade700,
+              success ? Colors.green.shade700 : Colors.red.shade700,
         ),
       );
     } finally {

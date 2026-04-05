@@ -7,6 +7,7 @@ import 'providers/theme_provider.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/downloads/downloads_screen.dart';
 import 'widgets/floating_nav_toolbar.dart';
+import 'services/download_service.dart';
 
 final navigationProvider = NotifierProvider<_NavNotifier, int>(
   _NavNotifier.new,
@@ -20,6 +21,7 @@ class _NavNotifier extends Notifier<int> {
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  DownloadService.init();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,

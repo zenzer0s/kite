@@ -91,38 +91,44 @@ data class MediaInfo(
 
 // ── Activity ──────────────────────────────────────────────────────────────────
 class ShareActivity : ComponentActivity() {
+    private var currentUrl = androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    private fun extractUrlFromIntent(intent: android.content.Intent?): String? {
+        if (intent == null) return null
+        val action = intent.action
+        return when {
+            android.content.Intent.ACTION_SEND == action && "text/plain" == intent.type ->
+                intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: intent.dataString
+            android.content.Intent.ACTION_VIEW == action -> intent.dataString
+            else -> intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: intent.dataString
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val action = intent.action
-        val url: String? = when {
-            Intent.ACTION_SEND == action && "text/plain" == intent.type ->
-                intent.getStringExtra(Intent.EXTRA_TEXT) ?: intent.dataString
-            Intent.ACTION_VIEW == action -> intent.dataString
-            else -> intent.getStringExtra(Intent.EXTRA_TEXT) ?: intent.dataString
-        }
-
+        val url = extractUrlFromIntent(intent)
         if (url.isNullOrBlank()) {
-            Toast.makeText(this, "No valid URL found", Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(this, "No valid URL found", android.widget.Toast.LENGTH_SHORT).show()
             finish()
             return
         }
+        currentUrl.value = url
 
-        val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
         val defaultFormat = prefs.getString("flutter.settings_default_format", "auto")
         var outputDir = prefs.getString("flutter.settings_download_dir", "")
         if (outputDir.isNullOrBlank()) {
-            outputDir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            outputDir = java.io.File(
+                android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
                 "Kite"
             ).absolutePath
         }
 
         if (defaultFormat == "auto") {
-            Toast.makeText(this, "Kite: Downloading...", Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(this, "Kite: Downloading...", android.widget.Toast.LENGTH_SHORT).show()
             DownloadService.startDownload(
-                applicationContext, System.currentTimeMillis().toString(),
+                applicationContext, "T-${System.currentTimeMillis()}-${(100..999).random()}",
                 url, false, null, outputDir!!
             )
             finish()
@@ -131,8 +137,19 @@ class ShareActivity : ComponentActivity() {
 
         setContent {
             KiteTheme {
-                ShareBottomSheet(url, outputDir!!)
+                currentUrl.value?.let { 
+                    ShareBottomSheet(it, outputDir!!)
+                }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val url = extractUrlFromIntent(intent)
+        if (url != null) {
+            currentUrl.value = url
         }
     }
 
@@ -146,44 +163,32 @@ class ShareActivity : ComponentActivity() {
         LaunchedEffect(url) {
             try {
                 mediaInfo = withContext(Dispatchers.IO) {
-                    KiteApp.awaitNativeToolsReady().getOrThrow()
-                    val request = YoutubeDLRequest(url).apply {
-                        addOption("-J")
-                        addOption("--no-playlist")
-                        addOption("-R", "1")
-                        addOption("--socket-timeout", "10")
-                    }
-                    val json = JSONObject(YoutubeDL.getInstance().execute(request).out)
-                    val formatsArray = json.optJSONArray("formats") ?: JSONArray()
+                    val info = KiteNative.fetchInfo(url)
+                    val formats = info["formats"] as? List<Map<String, Any?>> ?: emptyList()
 
                     val videoList = mutableListOf<MediaFormat>()
                     val audioList = mutableListOf<MediaFormat>()
 
-                    for (i in 0 until formatsArray.length()) {
-                        val fmt    = formatsArray.getJSONObject(i)
-                        val vcodec = fmt.optString("vcodec", "none")
-                        val acodec = fmt.optString("acodec", "none")
+                    for (fmt in formats) {
+                        val vcodec = fmt["vcodec"] as? String ?: "none"
+                        val acodec = fmt["acodec"] as? String ?: "none"
                         if (vcodec == "none" && acodec == "none") continue
 
-                        val width  = fmt.optInt("width", 0)
-                        val height = fmt.optInt("height", 0)
-                        val res    = if (width > 0 && height > 0) "${width}x${height}"
-                                     else fmt.optString("format_note", "")
                         val mf = MediaFormat(
-                            formatId    = fmt.optString("format_id"),
-                            ext         = fmt.optString("ext"),
-                            resolution  = res,
-                            filesize    = fmt.optLong("filesize", 0),
-                            formatNote  = fmt.optString("format_note", ""),
+                            formatId    = fmt["format_id"] as? String ?: "",
+                            ext         = fmt["ext"] as? String ?: "",
+                            resolution  = fmt["resolution"] as? String ?: "",
+                            filesize    = (fmt["filesize"] as? Double)?.toLong() ?: 0L,
+                            formatNote  = fmt["format_note"] as? String ?: "",
                             isAudioOnly = vcodec == "none" && acodec != "none",
-                            bitrate     = fmt.optDouble("tbr", 0.0),
-                            abr         = fmt.optDouble("abr", 0.0),
-                            height      = height
+                            bitrate     = fmt["vbr"] as? Double ?: 0.0,
+                            abr         = fmt["abr"] as? Double ?: 0.0,
+                            height      = (fmt["height"] as? Double)?.toInt() ?: 0
                         )
                         if (mf.isAudioOnly) audioList.add(mf) else videoList.add(mf)
                     }
 
-                    // Mirror Flutter: deduplicate video by height descending, best audio only
+                    // Deduplicate and mirror Flutter logic
                     val seenH = mutableSetOf<Int>()
                     val dedupVideo = videoList
                         .filter { it.height > 0 }
@@ -196,10 +201,10 @@ class ShareActivity : ComponentActivity() {
 
                     MediaInfo(
                         url          = url,
-                        title        = json.optString("title", "Unknown Video"),
-                        uploader     = json.optString("uploader", "Unknown"),
-                        duration     = json.optInt("duration", 0),
-                        thumbnail    = json.optString("thumbnail", ""),
+                        title        = info["title"] as? String ?: "Unknown Video",
+                        uploader     = info["uploader"] as? String ?: "Unknown",
+                        duration     = info["duration"] as? Int ?: 0,
+                        thumbnail    = info["thumbnail"] as? String ?: "",
                         videoFormats = dedupVideo,
                         audioFormats = bestAudio
                     )
@@ -552,12 +557,13 @@ class ShareActivity : ComponentActivity() {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun startDownload(url: String, formatId: String, audioOnly: Boolean, outputDir: String) {
+        val taskId = "T-${System.currentTimeMillis()}-${(100..999).random()}"
         DownloadService.startDownload(
             applicationContext,
-            System.currentTimeMillis().toString(),
-            url, audioOnly, formatId, outputDir
+            taskId,
+            url, audioOnly, formatId, outputDir!!
         )
-        Toast.makeText(this, "Kite: Starting download...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Kite: 📡 Starting download...", Toast.LENGTH_SHORT).show()
         finish()
     }
 

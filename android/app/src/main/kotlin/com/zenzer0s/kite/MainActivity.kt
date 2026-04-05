@@ -36,7 +36,6 @@ import com.zenzer0s.kite.expressive.ExpressiveLoadingViewFactory
 import com.zenzer0s.kite.expressive.ExpressiveQuickActionsViewFactory
 
 open class MainActivity : FlutterFragmentActivity() {
-
     companion object {
         const val METHOD_CHANNEL = "com.zenzer0s.kite/downloader"
         const val EVENT_CHANNEL = "com.zenzer0s.kite/progress"
@@ -46,12 +45,24 @@ open class MainActivity : FlutterFragmentActivity() {
         private const val DOWNLOAD_PROGRESS_INTERVAL_MS = 200L
         private const val CONCURRENT_FRAGMENTS = "8"
 
+        var globalProgressSink: EventChannel.EventSink? = null
+        var shareSink: EventChannel.EventSink? = null
+        var pendingSharedUrl: String? = null
         val sharedScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
-                                var globalProgressSink: EventChannel.EventSink? = null
+        
+        private var methodChannel: MethodChannel? = null
+
+        fun setMethodChannel(channel: MethodChannel) {
+            methodChannel = channel
+        }
+
+        fun notifyHistoryChanged() {
+            sharedScope.launch {
+                methodChannel?.invokeMethod("onHistoryChanged", null)
+            }
+        }
     }
 
-    private var shareSink: EventChannel.EventSink? = null
-    private var pendingSharedUrl: String? = null
     private val initMutex = Mutex()
     private var ytDlpReady = false
     private val ytDlpPrefs by lazy {
@@ -158,41 +169,44 @@ open class MainActivity : FlutterFragmentActivity() {
                 }
             })
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
-            .setMethodCallHandler { call, result ->
+        val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, METHOD_CHANNEL)
+        methodChannel = channel
+        channel.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "fetchInfo" -> {
                         val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
                         Log.d("KiteMain", "fetchInfo called url=$url")
                         sharedScope.launch {
                             try {
-                                withContext(Dispatchers.IO) { ensureInit() }
-                                Log.d("KiteMain", "fetchInfo: ready, fetching")
-                                val startedAt = SystemClock.elapsedRealtime()
-                                val info = withContext(Dispatchers.IO) {
-                                    val requestStartedAt = SystemClock.elapsedRealtime()
-                                    val req = YoutubeDLRequest(url).apply {
-                                        addOption("--dump-single-json")
-                                        addOption("--no-playlist")
-                                        addOption("-R", "1")
-                                        addOption("--socket-timeout", "5")
-                                        addOption("--extractor-args", "youtube:player_skip=configs,js")
-                                    }
-                                    val requestBuiltAt = SystemClock.elapsedRealtime()
-                                    Log.d("KiteMain", "fetchInfo: request built in ${requestBuiltAt - requestStartedAt}ms")
-                                    val executeStartedAt = SystemClock.elapsedRealtime()
-                                    val response = YoutubeDL.getInstance().execute(req)
-                                    val executeFinishedAt = SystemClock.elapsedRealtime()
-                                    Log.d("KiteMain", "fetchInfo: yt-dlp execute finished in ${executeFinishedAt - executeStartedAt}ms")
-                                    val parsed = response.out.toVideoInfoMap()
-                                    Log.d("KiteMain", "fetchInfo: formats=${(parsed["formats"] as? List<*>)?.size ?: 0} parse finished in ${SystemClock.elapsedRealtime() - executeFinishedAt}ms")
-                                    parsed
-                                }
-                                Log.d("KiteMain", "fetchInfo: completed in ${SystemClock.elapsedRealtime() - startedAt}ms title=${info["title"]}")
+                                val info = KiteNative.fetchInfo(url)
                                 result.success(info)
                             } catch (e: Exception) {
-                                Log.e("KiteMain", "fetchInfo FAILED: ${e.javaClass.simpleName}: ${e.message}")
+                                Log.e("KiteMain", "fetchInfo FAILED: ${e.message}")
                                 result.error("FETCH_ERROR", e.message, null)
+                            }
+                        }
+                    }
+
+                    "normalizeUrl" -> {
+                        val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
+                        result.success(KiteNative.normalizeUrl(url))
+                    }
+
+                    "deleteHistoryItem" -> {
+                        val id = call.argument<Int>("id") ?: return@setMethodCallHandler result.error("INVALID", "id required", null)
+                        KiteNative.deleteHistoryItem(this, id)
+                        result.success(true)
+                    }
+
+                    "testTelegramConnection" -> {
+                        val token = call.argument<String>("token") ?: return@setMethodCallHandler result.error("INVALID", "token required", null)
+                        val chatId = call.argument<String>("chatId") ?: return@setMethodCallHandler result.error("INVALID", "chatId required", null)
+                        sharedScope.launch {
+                            val res = KiteNative.testTelegramConnection(token, chatId)
+                            if (res.isSuccess) {
+                                result.success(mapOf("success" to true))
+                            } else {
+                                result.success(mapOf("success" to false, "error" to res.exceptionOrNull()?.message))
                             }
                         }
                     }
@@ -204,7 +218,7 @@ open class MainActivity : FlutterFragmentActivity() {
                         val outputDir = call.argument<String>("outputDir")
                             ?: File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kite").absolutePath
 
-                        val taskId = System.currentTimeMillis().toString()
+                        val taskId = "T-${System.currentTimeMillis()}-${(100..999).random()}"
                         DownloadService.startDownload(applicationContext, taskId, url, audioOnly, formatId, outputDir)
                         result.success(taskId)
                     }
@@ -354,12 +368,14 @@ open class MainActivity : FlutterFragmentActivity() {
                         
                         try {
                             val uri = androidx.core.content.FileProvider.getUriForFile(applicationContext, "${packageName}.fileprovider", file)
+                            val mime = KiteNative.getMimeType(path)
+                            
                             val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, applicationContext.contentResolver.getType(uri))
+                                setDataAndType(uri, mime)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
-                            startActivity(intent)
+                            startActivity(Intent.createChooser(intent, "Open with..."))
                             result.success(true)
                         } catch (e: Exception) {
                             result.error("OPEN_ERROR", e.message, null)
@@ -422,37 +438,4 @@ open class MainActivity : FlutterFragmentActivity() {
         }
     }
 
-    private fun String.toVideoInfoMap(): Map<String, Any?> {
-        val json = JSONObject(this)
-        val formatsArray = json.optJSONArray("formats")
-        val formats: List<Map<String, Any?>> = if (formatsArray != null) {
-            (0 until formatsArray.length()).map { i ->
-                val f = formatsArray.getJSONObject(i)
-                mapOf(
-                    "format_id" to f.optString("format_id"),
-                    "format_note" to f.optString("format_note").takeIf { it.isNotEmpty() },
-                    "ext" to f.optString("ext").takeIf { it.isNotEmpty() },
-                    "vcodec" to f.optString("vcodec").takeIf { it.isNotEmpty() },
-                    "acodec" to f.optString("acodec").takeIf { it.isNotEmpty() },
-                    "width" to if (!f.isNull("width")) f.optDouble("width") else null,
-                    "height" to if (!f.isNull("height")) f.optDouble("height") else null,
-                    "resolution" to f.optString("resolution").takeIf { it.isNotEmpty() },
-                    "vbr" to if (!f.isNull("vbr")) f.optDouble("vbr") else null,
-                    "abr" to if (!f.isNull("abr")) f.optDouble("abr") else null,
-                    "filesize" to if (!f.isNull("filesize")) f.optLong("filesize").toDouble() else null,
-                    "filesize_approx" to if (!f.isNull("filesize_approx")) f.optLong("filesize_approx").toDouble() else null,
-                )
-            }
-        } else emptyList()
-        return mapOf(
-            "id" to json.optString("id"),
-            "title" to json.optString("title"),
-            "uploader" to json.optString("uploader"),
-            "thumbnail" to json.optString("thumbnail"),
-            "duration" to if (json.has("duration") && !json.isNull("duration")) json.optInt("duration") else null,
-            "webpage_url" to json.optString("webpage_url"),
-            "ext" to json.optString("ext"),
-            "formats" to formats,
-        )
-    }
 }

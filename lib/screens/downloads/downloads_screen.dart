@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,15 +24,20 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen>
     with WidgetsBindingObserver {
   _Filter _filter = _Filter.all;
+  StreamSubscription<void>? _syncSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _syncSub = DownloadService.syncStream.listen((_) {
+      ref.invalidate(downloadHistoryProvider);
+    });
   }
 
   @override
   void dispose() {
+    _syncSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -397,7 +403,7 @@ class _DownloadCard extends StatelessWidget {
       direction: DismissDirection.endToStart,
       onDismissed: (_) {
         HapticFeedback.mediumImpact();
-        ref.read(databaseProvider).deleteDownload(item.id);
+        DownloadService.deleteHistoryItem(item.id);
       },
       background: Container(
         alignment: Alignment.centerRight,

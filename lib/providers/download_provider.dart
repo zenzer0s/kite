@@ -1,11 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/download_service.dart';
-import '../services/telegram_service.dart';
 import 'database_provider.dart';
-import 'settings_provider.dart';
 
 enum DownloadStatus { idle, fetching, downloading, paused, done, error }
 
@@ -162,9 +159,7 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
       } else if (p.done) {
         debugPrint('Kite: Download done native! Saving to history and Telegram: ${p.taskId}');
         if (_savedTaskIds.add(p.taskId)) {
-          debugPrint('Kite: Native already saved to history. Triggering Telegram...');
-          await _maybeUploadToTelegram(task);
-          debugPrint('Kite: Telegram finished. Refreshing database stream...');
+          debugPrint('Kite: Download finished. Refreshing database stream...');
           ref.invalidate(downloadHistoryProvider);
         }
         
@@ -252,59 +247,9 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
     updated.remove(taskId);
     state = updated;
   }
-
-
-  Future<void> _maybeUploadToTelegram(DownloadTask task) async {
-    debugPrint('Kite: _maybeUploadToTelegram checking settings...');
-    final settings = ref.read(settingsProvider);
-    if (!settings.telegramUpload || !settings.telegramFullyConfigured) {
-      debugPrint('Kite: Telegram not configured. Skipping upload.');
-      return;
-    }
-
-    final safeTitle = task.info.title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final ext = task.targetExt ?? task.info.ext;
-    String filePath = '${task.outputDir}/$safeTitle.$ext';
-    debugPrint('Kite: Telegram targeting filePath: $filePath');
-
-    // Fallback search if the predicted path is not exact
-    if (!File(filePath).existsSync()) {
-      debugPrint('Kite: Predicted path missing, searching in dir: ${task.outputDir}');
-      try {
-        final dir = Directory(task.outputDir);
-        final files = dir.listSync().whereType<File>().toList()
-          ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
-        for (var f in files) {
-          if (f.path.contains(safeTitle)) {
-            filePath = f.path;
-            break;
-          }
-        }
-      } catch (_) {}
-    }
-
-    final result = await TelegramService.uploadFile(
-        filePath: filePath,
-        token: settings.telegramBotToken,
-        chatId: settings.telegramChatId,
-    );
-
-    if (!result.isSuccess) {
-      final currentTask = state[task.taskId];
-      if (currentTask != null) {
-        _update(
-          task.taskId,
-          currentTask.copyWith(
-            status: DownloadStatus.error,
-            errorMessage: 'Telegram Upload: ${result.error}',
-          ),
-        );
-      }
-    }
-  }
 }
 
 final downloadsProvider =
     NotifierProvider<DownloadsNotifier, Map<String, DownloadTask>>(
-      DownloadsNotifier.new,
-    );
+  DownloadsNotifier.new,
+);
