@@ -168,8 +168,8 @@ object KiteNative {
     /**
      * Background uploader for Telegram.
      */
-    suspend fun uploadToTelegram(context: Context, filePath: String, ext: String) {
-        withContext(Dispatchers.IO) {
+    suspend fun uploadToTelegram(context: Context, filePath: String, ext: String): Boolean {
+        return withContext(Dispatchers.IO) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val enabled = prefs.getBoolean("flutter.telegram_upload", false)
             val token = prefs.getString("flutter.telegram_bot_token", "") ?: ""
@@ -177,18 +177,18 @@ object KiteNative {
 
             if (!enabled || token.isBlank() || chatId.isBlank()) {
                 Log.d("KiteNative", "Telegram upload skipped: enabled=$enabled")
-                return@withContext
+                return@withContext false
             }
 
             val file = File(filePath)
             if (!file.exists()) {
                 Log.e("KiteNative", "Telegram upload failed: not found at $filePath")
-                return@withContext
+                return@withContext false
             }
 
             if (file.length() > 50 * 1024 * 1024) {
                 Log.w("KiteNative", "Telegram upload skipped: >50MB limit")
-                return@withContext
+                return@withContext false
             }
 
             try {
@@ -227,14 +227,17 @@ object KiteNative {
                     out.write("--$boundary--\r\n".toByteArray())
                 }
 
-                if (conn.responseCode == 200) {
+                val success = conn.responseCode == 200
+                if (success) {
                     Log.d("KiteNative", "Telegram upload success: ${file.name}")
                 } else {
                     Log.e("KiteNative", "Telegram failed: ${conn.responseCode}")
                 }
                 conn.disconnect()
+                success
             } catch (e: Exception) {
                 Log.e("KiteNative", "Telegram error: ${e.message}")
+                false
             }
         }
     }

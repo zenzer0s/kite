@@ -95,11 +95,16 @@ class DownloadService : Service() {
 
                 val ext = if (audioOnly) "mp3" else parsedExt
                 
+                // Fast Mode Detection
+                val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                val fastMode = prefs.getBoolean("flutter.fast_mode", false)
+                val targetDir = if (fastMode) cacheDir.absolutePath else outputDir!!
+                
                 builder.setContentTitle("Downloading: $title")
                 notificationManager.notify(notificationId, builder.build())
 
                 val req = YoutubeDLRequest(url).apply {
-                    addOption("-o", "$outputDir/%(title)s.%(ext)s")
+                    addOption("-o", "$targetDir/%(title)s.%(ext)s")
                     addOption("--downloader", "aria2c")
                     addOption("--downloader-args", "aria2c:\"-x 16 -k 1M\"")
                     addOption("--no-playlist")
@@ -158,7 +163,7 @@ class DownloadService : Service() {
                         .setOngoing(false)
                     notificationManager.notify(notificationId, builder.build())
 
-                    val filePath = KiteNative.getSafeFilePath(outputDir, title, ext)
+                    val filePath = KiteNative.getSafeFilePath(targetDir, title, ext)
                     
                     // Always save natively to history.
                     val meta = KiteNative.DownloadMetadata(title, uploader, url, thumbnail, filePath, ext, duration)
@@ -174,7 +179,20 @@ class DownloadService : Service() {
                     notificationManager.notify(notificationId, builder.build())
 
                     // Trigger Telegram upload natively
-                    KiteNative.uploadToTelegram(this@DownloadService, filePath, ext)
+                    val uploaded = KiteNative.uploadToTelegram(this@DownloadService, filePath, ext)
+                    
+                    // Fast Mode: Delete the temporary file ONLY if upload succeeded
+                    if (fastMode && uploaded) {
+                        try {
+                            val f = File(filePath)
+                            if (f.exists()) {
+                                f.delete()
+                                Log.d("KiteService", "Fast Mode: Cleaned up temp file $filePath")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("KiteService", "Fast Mode: Cleanup failed", e)
+                        }
+                    }
                     
                     // Final Clean Notification
                     notificationManager.cancel(notificationId)
