@@ -74,17 +74,7 @@ flutter {
     source = "../.."
 }
 
-tasks.register<Exec>("uploadToTelegram") {
-    group = "upload"
-    description = "Uploads the release APK to Telegram."
-    commandLine("python3", "${project.projectDir}/../upload_to_telegram.py")
-    isIgnoreExitValue = true
-}
-
-afterEvaluate {
-    tasks.findByName("assembleRelease")?.finalizedBy("uploadToTelegram")
-}
-
+// Native implementation: youtubedl-android library
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 

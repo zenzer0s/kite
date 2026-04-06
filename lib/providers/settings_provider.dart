@@ -14,6 +14,7 @@ class AppSettings {
   final bool telegramUpload;
 
   final bool fastMode;
+  final String? kiteCookies;
   final bool initialized;
 
   const AppSettings({
@@ -24,6 +25,7 @@ class AppSettings {
     this.telegramChatId = '',
     this.telegramUpload = false,
     this.fastMode = false,
+    this.kiteCookies,
     this.initialized = false,
   });
 
@@ -35,6 +37,7 @@ class AppSettings {
     String? telegramChatId,
     bool? telegramUpload,
     bool? fastMode,
+    String? kiteCookies,
     bool? initialized,
   }) {
     return AppSettings(
@@ -45,6 +48,7 @@ class AppSettings {
       telegramChatId: telegramChatId ?? this.telegramChatId,
       telegramUpload: telegramUpload ?? this.telegramUpload,
       fastMode: fastMode ?? this.fastMode,
+      kiteCookies: kiteCookies ?? this.kiteCookies,
       initialized: initialized ?? this.initialized,
     );
   }
@@ -65,6 +69,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _telegramChatIdKey = 'telegram_chat_id';
   static const _telegramUploadKey = 'telegram_upload';
   static const _fastModeKey = 'fast_mode';
+  static const _cookiesKey = 'kite_cookies';
 
   static const String defaultDir = '/storage/emulated/0/Download/Kite';
 
@@ -108,6 +113,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
         telegramChatId: prefs.getString(_telegramChatIdKey) ?? '',
         telegramUpload: prefs.getBool(_telegramUploadKey) ?? false,
         fastMode: prefs.getBool(_fastModeKey) ?? false,
+        kiteCookies: prefs.getString(_cookiesKey),
         initialized: true,
       );
     } catch (e) {
@@ -178,5 +184,15 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_fastModeKey, enabled);
     state = state.copyWith(fastMode: enabled);
+  }
+
+  Future<void> setCookies(String? cookies) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (cookies == null) {
+      await prefs.remove(_cookiesKey);
+    } else {
+      await prefs.setString(_cookiesKey, cookies);
+    }
+    state = state.copyWith(kiteCookies: cookies);
   }
 }

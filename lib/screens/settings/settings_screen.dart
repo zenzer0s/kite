@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/ytdlp_provider.dart';
+import '../login/login_screen.dart';
 import 'telegram_settings_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -106,6 +107,96 @@ class SettingsScreen extends ConsumerWidget {
                     ref,
                     settings.concurrentDownloads,
                   ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _SettingsGroup(
+              title: 'Accounts',
+              cs: cs,
+              children: [
+                _SettingsTile(
+                  title: 'Instagram',
+                  subtitle: settings.kiteCookies?.contains('ds_user_id') == true 
+                      ? 'Authenticated' 
+                      : 'Log in to download private content',
+                  icon: Icons.camera_alt_rounded,
+                  cs: cs,
+                  trailing: settings.kiteCookies?.contains('ds_user_id') == true
+                      ? const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20)
+                      : Icon(Icons.chevron_right_rounded, color: cs.outline),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const LoginScreen(
+                        title: 'Instagram Login',
+                        initialUrl: 'https://www.instagram.com/accounts/login/',
+                      ),
+                    ),
+                  ),
+                ),
+                _SettingsTile(
+                  title: 'YouTube',
+                  subtitle: settings.kiteCookies?.contains('SAPISID') == true 
+                      ? 'Authenticated' 
+                      : 'Log in for member-only content',
+                  icon: Icons.play_circle_fill_rounded,
+                  cs: cs,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const LoginScreen(
+                        title: 'YouTube Login',
+                        initialUrl: 'https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fwww.youtube.com',
+                      ),
+                    ),
+                  ),
+                ),
+                _SettingsTile(
+                  title: 'Sign Out All Accounts',
+                  subtitle: settings.kiteCookies != null 
+                             ? 'Clear all sessions and flush cookies' 
+                             : 'No active session',
+                  icon: Icons.logout_rounded,
+                  cs: cs,
+                  onTap: settings.kiteCookies == null ? null : () async {
+                    final confirmed = await showAdaptiveDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog.adaptive(
+                        title: Text('Sign Out?', style: GoogleFonts.outfit(fontWeight: FontWeight.w600)),
+                        content: Text('This will clear all Instagram and YouTube sessions and flush browser cookies natively.', style: GoogleFonts.outfit(fontSize: 14)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text('Cancel', style: GoogleFonts.outfit(color: cs.outline)),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: Text('Sign Out', style: GoogleFonts.outfit(color: cs.error, fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirmed == true) {
+                      const platform = MethodChannel('com.zenzer0s.kite/downloader');
+                      try {
+                        HapticFeedback.mediumImpact();
+                        await platform.invokeMethod('clearCookies');
+                        await ref.read(settingsProvider.notifier).setCookies(null);
+                        
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('🎉 Session cleared!', style: GoogleFonts.outfit()),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: cs.secondary,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        // Silent fail
+                      }
+                    }
+                  },
                 ),
               ],
             ),

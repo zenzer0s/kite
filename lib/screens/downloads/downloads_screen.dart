@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -397,6 +398,7 @@ class _DownloadCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final duration = _formatDuration(item.duration);
     final isAudio = _isAudioExt(item.ext);
+    final exists = io.File(item.filePath).existsSync();
 
     return Dismissible(
       key: ValueKey(item.id),
@@ -420,6 +422,15 @@ class _DownloadCard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
+          if (!exists) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('☁️ File Uploaded to Telegram (Local copy cleared).'),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
           DownloadService.openFile(item.filePath).catchError((e) {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -438,21 +449,42 @@ class _DownloadCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(15),
-                ),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: item.thumbnail.isNotEmpty
-                      ? Image.network(
-                          item.thumbnail,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) =>
-                              _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
-                        )
-                      : _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
-                ),
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(15),
+                    ),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: item.thumbnail.isNotEmpty
+                          ? Image.network(
+                              item.thumbnail,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
+                            )
+                          : _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
+                    ),
+                  ),
+                  if (!exists)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.send_rounded, // Telegram-ish Icon
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                ],
               ),
               Expanded(
                 child: Padding(
@@ -484,6 +516,18 @@ class _DownloadCard extends StatelessWidget {
                                 color: cs.outline,
                               ),
                             ),
+                          if (!exists) ...[
+                            const Spacer(),
+                            Text(
+                              'UPLOADED',
+                              style: GoogleFonts.outfit(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blue,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                       if (item.uploader.isNotEmpty) ...[

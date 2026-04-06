@@ -86,7 +86,7 @@ class DownloadService : Service() {
             try {
                 KiteApp.awaitNativeToolsReady().getOrThrow()
 
-                val infoMap = KiteNative.fetchInfo(url)
+                val infoMap = KiteNative.fetchInfo(url, this@DownloadService)
                 val title = infoMap["title"] as? String ?: "Unknown Video"
                 val uploader = infoMap["uploader"] as? String ?: "Unknown"
                 val duration = infoMap["duration"] as? Int ?: 0
@@ -111,6 +111,13 @@ class DownloadService : Service() {
                     addOption("-R", "1")
                     addOption("--socket-timeout", "5")
                     addOption("--concurrent-fragments", CONCURRENT_FRAGMENTS)
+                    
+                    // Add Cookies for Private Downloads
+                    val cookieFile = KiteNative.writeCookiesFile(this@DownloadService)
+                    if (cookieFile != null && cookieFile.exists()) {
+                        addOption("--cookies", cookieFile.absolutePath)
+                    }
+                    
                     when {
                         audioOnly -> {
                             addOption("-x")

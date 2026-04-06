@@ -53,6 +53,16 @@
 # Kite App Specific (Full preservation)
 -keep class com.zenzer0s.kite.** { *; }
 
+# Ignore missing Java desktop/XML library classes not present on Android
+-dontwarn java.beans.**
+-dontwarn javax.xml.stream.**
+-dontwarn com.fasterxml.jackson.databind.**
+-dontwarn org.apache.tika.**
+-dontwarn org.apache.james.mime4j.**
+-dontwarn com.google.common.collect.**
+-dontwarn org.apache.pdfbox.**
+-dontwarn org.checkerframework.**
+
 # Fix for Play Core and GMS
 -dontwarn com.google.android.play.core.**
 -dontwarn com.google.android.gms.internal.**

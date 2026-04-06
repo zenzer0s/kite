@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.CancellationException
 
 import android.os.Bundle
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -337,6 +338,27 @@ open class MainActivity : FlutterFragmentActivity() {
                             android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         )
                         result.success(true)
+                    }
+
+                    "getCookies" -> {
+                        val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
+                        try {
+                            val cookies = android.webkit.CookieManager.getInstance().getCookie(url) ?: ""
+                            result.success(cookies)
+                        } catch (e: Exception) {
+                            result.error("COOKIE_ERROR", e.message, null)
+                        }
+                    }
+
+                    "clearCookies" -> {
+                        try {
+                            val cookieManager = android.webkit.CookieManager.getInstance()
+                            cookieManager.removeAllCookies(null)
+                            cookieManager.flush()
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("CLEAR_COOKIE_ERROR", e.message, null)
+                        }
                     }
 
                     "isIgnoringBatteryOptimizations" -> {
