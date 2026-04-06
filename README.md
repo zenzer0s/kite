@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="assets/images/logo.png" width=160 height=160 align="center">
+<img src="assets/images/banner.png" width="100%" align="center">
 
-# Kite
+
 
 ### A Modern Video & Audio Downloader for Android
 
