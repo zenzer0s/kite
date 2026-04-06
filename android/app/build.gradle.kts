@@ -87,7 +87,6 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui.text.google.fonts)
     implementation("io.coil-kt:coil-compose:2.6.0")
-    implementation("androidx.compose.material:material-icons-extended:1.6.0")
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     implementation("io.github.junkfood02.youtubedl-android:library:0.18.1")
