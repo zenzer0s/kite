@@ -1,0 +1,52 @@
+name: Release ARM64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get App Version
+        id: version
+        run: |
+          # Extract version from pubspec.yaml (e.g., 1.0.0+1)
+          VERSION=$(grep 'version: ' pubspec.yaml | sed 's/version: //')
+          echo "tag_name=v$VERSION" >> $GITHUB_OUTPUT
+          echo "release_name=Kite v$VERSION (Stable)" >> $GITHUB_OUTPUT
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Build ARM64 APK
+        run: flutter build apk --release --target-platform android-arm64
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: ${{ steps.version.outputs.release_name }}
+          draft: false
+          prerelease: false
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
