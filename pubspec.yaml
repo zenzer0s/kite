@@ -100,17 +100,17 @@ flutter:
 flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
-  image_path: "kite.png"
+  image_path: "assets/images/logo.png"
   min_sdk_android: 21
   web:
     generate: true
-    image_path: "kite.png"
+    image_path: "assets/images/logo.png"
     background_color: "#ffffff"
     theme_color: "#ffffff"
   windows:
     generate: true
-    image_path: "kite.png"
+    image_path: "assets/images/logo.png"
     icon_size: 256
   macos:
     generate: true
-    image_path: "kite.png"
+    image_path: "assets/images/logo.png"
