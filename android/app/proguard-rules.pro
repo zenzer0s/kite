@@ -22,7 +22,7 @@
 }
 
 # 4. Standard preserves (Keep attributes like Annotations and Signatures)
--keepattributes *Annotation*,Signature,EnclosingMethod,InnerClasses
+-keepattributes *Annotation*, EnclosingMethod, Signature
 -keepclassmembers class * {
     @androidx.annotation.Keep <methods>;
     @androidx.annotation.Keep <fields>;

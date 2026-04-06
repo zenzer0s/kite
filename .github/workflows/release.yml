@@ -38,6 +38,14 @@ jobs:
       - name: Install Dependencies
         run: flutter pub get
 
+      - name: Setup Android Signing
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/keystore.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/keystore.properties
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> android/keystore.properties
+          echo "storeFile=upload-keystore.jks" >> android/keystore.properties
+
       - name: Build ARM64 APK
         run: flutter build apk --release --target-platform android-arm64
 
