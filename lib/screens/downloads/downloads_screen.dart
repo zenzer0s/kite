@@ -26,13 +26,19 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen>
     with WidgetsBindingObserver {
   _Filter _filter = _Filter.all;
   StreamSubscription<void>? _syncSub;
+  final Set<int> _ignoredIds = {};
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _syncSub = DownloadService.syncStream.listen((_) {
-      ref.invalidate(downloadHistoryProvider);
+      if (mounted) {
+        setState(() {
+          _ignoredIds.clear();
+        });
+        ref.invalidate(downloadHistoryProvider);
+      }
     });
   }
 
@@ -49,6 +55,29 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen>
       // Force refresh database stream when app resumes (in case another engine wrote to the DB)
       ref.invalidate(downloadHistoryProvider);
     }
+  }
+
+  Widget _buildGrid(List<DownloadedItem> items, ColorScheme cs) {
+    final filtered = items.where((i) => !_ignoredIds.contains(i.id)).toList();
+    if (filtered.isEmpty) {
+      return _EmptyState(
+        key: ValueKey('empty_$_filter'),
+        cs: cs,
+        filter: _filter,
+      );
+    }
+    return _DownloadGrid(
+      key: ValueKey('grid_$_filter'),
+      items: filtered,
+      cs: cs,
+      ref: ref,
+      onDismissed: (id) {
+        setState(() {
+          _ignoredIds.add(id);
+        });
+        DownloadService.deleteHistoryItem(id);
+      },
+    );
   }
 
   @override
@@ -114,17 +143,20 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen>
                   ),
                 ),
                 data: (items) {
-                  final filtered = switch (_filter) {
-                    _Filter.all => items,
-                    _Filter.audio =>
-                      items.where((i) => _isAudioExt(i.ext)).toList(),
-                    _Filter.video =>
-                      items.where((i) => !_isAudioExt(i.ext)).toList(),
-                  };
-                  if (filtered.isEmpty) {
-                    return _EmptyState(cs: cs, filter: _filter);
-                  }
-                  return _DownloadGrid(items: filtered, cs: cs, ref: ref);
+                  return AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 300),
+                    child: switch (_filter) {
+                      _Filter.all => _buildGrid(items, cs),
+                      _Filter.audio => _buildGrid(
+                        items.where((i) => _isAudioExt(i.ext)).toList(),
+                        cs,
+                      ),
+                      _Filter.video => _buildGrid(
+                        items.where((i) => !_isAudioExt(i.ext)).toList(),
+                        cs,
+                      ),
+                    },
+                  );
                 },
               ),
             ),
@@ -296,11 +328,14 @@ class _DownloadGrid extends StatelessWidget {
   final List<DownloadedItem> items;
   final ColorScheme cs;
   final WidgetRef ref;
+  final ValueChanged<int> onDismissed;
 
   const _DownloadGrid({
+    super.key,
     required this.items,
     required this.cs,
     required this.ref,
+    required this.onDismissed,
   });
 
   @override
@@ -315,8 +350,87 @@ class _DownloadGrid extends StatelessWidget {
         childAspectRatio: 0.78,
       ),
       itemCount: items.length,
-      itemBuilder: (context, i) =>
-          _DownloadCard(item: items[i], cs: cs, ref: ref),
+      itemBuilder: (context, i) {
+        final item = items[i];
+        final delay = i * 60; // Staggered delay for each card
+        return _AnimatedDownloadCard(
+          key: ValueKey('anim_${item.id}'),
+          delayMs: delay,
+          child: _DownloadCard(
+            item: item,
+            cs: cs,
+            ref: ref,
+            onDismissed: () => onDismissed(item.id),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AnimatedDownloadCard extends StatefulWidget {
+  final Widget child;
+  final int delayMs;
+
+  const _AnimatedDownloadCard({
+    super.key,
+    required this.child,
+    required this.delayMs,
+  });
+
+  @override
+  State<_AnimatedDownloadCard> createState() => _AnimatedDownloadCardState();
+}
+
+class _AnimatedDownloadCardState extends State<_AnimatedDownloadCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _fade;
+  late final Animation<double> _scale;
+  late final Animation<Offset> _slide;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _fade = CurvedAnimation(
+      parent: _ctrl,
+      curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+    );
+
+    _scale = Tween<double>(
+      begin: 0.92,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
+
+    _slide = Tween<Offset>(
+      begin: const Offset(0, 0.08),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+
+    Future.delayed(Duration(milliseconds: widget.delayMs), () {
+      if (mounted) _ctrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: ScaleTransition(scale: _scale, child: widget.child),
+      ),
     );
   }
 }
@@ -325,7 +439,7 @@ class _EmptyState extends StatelessWidget {
   final ColorScheme cs;
   final _Filter filter;
 
-  const _EmptyState({required this.cs, required this.filter});
+  const _EmptyState({super.key, required this.cs, required this.filter});
 
   @override
   Widget build(BuildContext context) {
@@ -379,10 +493,13 @@ class _DownloadCard extends StatelessWidget {
   final ColorScheme cs;
   final WidgetRef ref;
 
+  final VoidCallback onDismissed;
+
   const _DownloadCard({
     required this.item,
     required this.cs,
     required this.ref,
+    required this.onDismissed,
   });
 
   String _formatDuration(int seconds) {
@@ -405,7 +522,7 @@ class _DownloadCard extends StatelessWidget {
       direction: DismissDirection.endToStart,
       onDismissed: (_) {
         HapticFeedback.mediumImpact();
-        DownloadService.deleteHistoryItem(item.id);
+        onDismissed();
       },
       background: Container(
         alignment: Alignment.centerRight,
@@ -425,7 +542,9 @@ class _DownloadCard extends StatelessWidget {
           if (!exists) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('☁️ File Uploaded to Telegram (Local copy cleared).'),
+                content: Text(
+                  '☁️ File Uploaded to Telegram (Local copy cleared).',
+                ),
                 behavior: SnackBarBehavior.floating,
               ),
             );
@@ -461,8 +580,10 @@ class _DownloadCard extends StatelessWidget {
                           ? Image.network(
                               item.thumbnail,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
-                                  _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
+                              errorBuilder: (_, _, _) => _ThumbnailPlaceholder(
+                                isAudio: isAudio,
+                                cs: cs,
+                              ),
                             )
                           : _ThumbnailPlaceholder(isAudio: isAudio, cs: cs),
                     ),
