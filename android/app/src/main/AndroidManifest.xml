@@ -11,7 +11,7 @@
         android:label="Kite"
         android:name=".KiteApp"
         android:extractNativeLibs="true"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/launcher_icon">
         <activity
             android:name=".MainActivity"
             android:exported="true"
