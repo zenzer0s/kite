@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../providers/settings_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/ytdlp_provider.dart';
+import '../about/about_screen.dart';
 import '../login/login_screen.dart';
 import 'telegram_settings_screen.dart';
 import 'widgets/ytdlp_update_bottom_sheet.dart';
@@ -20,6 +22,7 @@ class SettingsScreen extends ConsumerWidget {
     final ytdlp = ref.watch(ytdlpProvider);
     final settings = ref.watch(settingsProvider);
     final isDark = themeMode == ThemeMode.dark;
+    
     final ytdlpSubtitle = ytdlp.isUpdating
         ? 'Checking for updates...'
         : ytdlp.lastStatus == null
@@ -46,15 +49,36 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             _SettingsGroup(
+              title: 'Engine',
+              cs: cs,
+              children: [
+                _SettingsTile(
+                  title: 'Engine Updates',
+                  subtitle: ytdlpSubtitle,
+                  icon: PhosphorIcons.cpu(),
+                  cs: cs,
+                  trailing: Icon(Icons.chevron_right_rounded, color: cs.outline),
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => const YtdlpUpdateBottomSheet(),
+                    );
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _SettingsGroup(
               title: 'Appearance',
               cs: cs,
               children: [
                 _SettingsTile(
                   title: 'Dark Mode',
                   subtitle: isDark ? 'Sleek & Professional' : 'Bright & Clear',
-                  icon: isDark
-                      ? Icons.nightlight_round
-                      : Icons.wb_sunny_rounded,
+                  icon: isDark ? PhosphorIcons.moon() : PhosphorIcons.sun(),
                   cs: cs,
                   trailing: Switch(
                     value: isDark,
@@ -74,7 +98,7 @@ class SettingsScreen extends ConsumerWidget {
                 _SettingsTile(
                   title: 'Download Directory',
                   subtitle: settings.downloadDir,
-                  icon: Icons.folder_rounded,
+                  icon: PhosphorIcons.folder(),
                   cs: cs,
                   trailing: Icon(
                     Icons.chevron_right_rounded,
@@ -89,15 +113,15 @@ class SettingsScreen extends ConsumerWidget {
                       ? 'Auto (Best Quality)'
                       : 'Show custom options',
                   icon: settings.defaultFormat == DefaultFormat.auto
-                      ? Icons.flash_on_rounded
-                      : Icons.list_alt_rounded,
+                      ? PhosphorIcons.lightning()
+                      : PhosphorIcons.listBullets(),
                   cs: cs,
                   onTap: () => _showFormatDialog(context, ref, settings),
                 ),
                 _SettingsTile(
                   title: 'Concurrent Downloads',
                   subtitle: '${settings.concurrentDownloads} simultaneous',
-                  icon: Icons.download_for_offline_rounded,
+                  icon: PhosphorIcons.stack(),
                   cs: cs,
                   trailing: Icon(
                     Icons.chevron_right_rounded,
@@ -121,7 +145,7 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: settings.kiteCookies?.contains('ds_user_id') == true 
                       ? 'Authenticated' 
                       : 'Log in to download private content',
-                  icon: Icons.camera_alt_rounded,
+                  icon: PhosphorIcons.instagramLogo(),
                   cs: cs,
                   trailing: settings.kiteCookies?.contains('ds_user_id') == true
                       ? const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20)
@@ -140,7 +164,7 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: settings.kiteCookies?.contains('SAPISID') == true 
                       ? 'Authenticated' 
                       : 'Log in for member-only content',
-                  icon: Icons.play_circle_fill_rounded,
+                  icon: PhosphorIcons.youtubeLogo(),
                   cs: cs,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -156,7 +180,7 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: settings.kiteCookies != null 
                              ? 'Clear all sessions and flush cookies' 
                              : 'No active session',
-                  icon: Icons.logout_rounded,
+                  icon: PhosphorIcons.signOut(),
                   cs: cs,
                   onTap: settings.kiteCookies == null ? null : () async {
                     final confirmed = await showAdaptiveDialog<bool>(
@@ -211,7 +235,7 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: settings.telegramUpload
                       ? 'Auto-upload enabled'
                       : 'Configure bot & auto-upload',
-                  icon: Icons.send_rounded,
+                  icon: PhosphorIcons.telegramLogo(),
                   cs: cs,
                   trailing: Icon(
                     Icons.chevron_right_rounded,
@@ -237,24 +261,15 @@ class SettingsScreen extends ConsumerWidget {
               cs: cs,
               children: [
                 _SettingsTile(
-                  title: 'Version',
-                  subtitle: '1.0.0',
-                  icon: Icons.info_outline_rounded,
-                  cs: cs,
-                ),
-                _SettingsTile(
-                  title: 'yt-dlp Engine',
-                  subtitle: ytdlpSubtitle,
-                  icon: Icons.terminal_rounded,
+                  title: 'About Kite',
+                  subtitle: 'Developer info, links, and support',
+                  icon: PhosphorIcons.info(),
                   cs: cs,
                   trailing: Icon(Icons.chevron_right_rounded, color: cs.outline),
                   onTap: () {
                     HapticFeedback.lightImpact();
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => const YtdlpUpdateBottomSheet(),
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AboutScreen()),
                     );
                   },
                 ),
@@ -538,7 +553,7 @@ class _SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
-            ?trailing,
+            if (trailing != null) trailing!,
           ],
         ),
       ),
@@ -590,7 +605,7 @@ class _BatteryOptimizationTileState extends State<_BatteryOptimizationTile> {
       subtitle: _isIgnoring
           ? 'Unrestricted background downloads'
           : 'Allow uninterrupted background downloads',
-      icon: Icons.battery_charging_full_rounded,
+      icon: PhosphorIcons.batteryChargingVertical(),
       cs: widget.cs,
       trailing: Switch(
         value: _isIgnoring,
