@@ -282,18 +282,11 @@ open class MainActivity : FlutterFragmentActivity() {
                     }
 
                     "updateYtDlp" -> {
+                        val channel = call.argument<String>("channel") ?: "stable"
                         sharedScope.launch {
                             try {
-                                withContext(Dispatchers.IO) { ensureInit() }
-                                val status = withContext(Dispatchers.IO) {
-                                    YoutubeDL.getInstance().updateYoutubeDL(application, YoutubeDL.UpdateChannel.STABLE)
-                                }
-                                storeYtDlpVersion(
-                                    withContext(Dispatchers.IO) {
-                                        YoutubeDL.getInstance().version(application.applicationContext)
-                                    }
-                                )
-                                result.success(status?.name ?: "ALREADY_UP_TO_DATE")
+                                val updated = KiteNative.updateYtDlp(applicationContext, channel)
+                                result.success(if (updated) "DONE" else "ALREADY_UP_TO_DATE")
                             } catch (e: Exception) {
                                 result.error("UPDATE_ERROR", e.message, null)
                             }
@@ -303,16 +296,16 @@ open class MainActivity : FlutterFragmentActivity() {
                     "getYtDlpVersion" -> {
                         sharedScope.launch {
                             try {
-                                withContext(Dispatchers.IO) { ensureInit() }
-                                val version = withContext(Dispatchers.IO) {
-                                    YoutubeDL.getInstance().version(application.applicationContext)
-                                        ?: getStoredYtDlpVersion()
-                                }
+                                val version = KiteNative.getYtDlpVersion(applicationContext)
                                 result.success(version)
                             } catch (e: Exception) {
                                 result.error("VERSION_ERROR", e.message, null)
                             }
                         }
+                    }
+
+                    "getYtDlpLastUpdateTime" -> {
+                        result.success(KiteNative.getYtDlpLastUpdateTime(applicationContext))
                     }
 
                     "minimize" -> {

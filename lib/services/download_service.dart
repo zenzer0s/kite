@@ -211,13 +211,18 @@ class DownloadService {
     await _method.invokeMethod('openFile', {'path': path});
   }
 
-  static Future<String> updateYtDlp() async {
-    final status = await _method.invokeMethod<String>('updateYtDlp');
+  static Future<String> updateYtDlp({String channel = 'stable'}) async {
+    final status = await _method.invokeMethod<String>('updateYtDlp', {'channel': channel});
     return status ?? 'ALREADY_UP_TO_DATE';
   }
 
   static Future<String> getYtDlpVersion() async {
     final version = await _method.invokeMethod<String>('getYtDlpVersion');
     return version ?? 'Unknown';
+  }
+
+  static Future<int> getYtDlpLastUpdateTime() async {
+    final time = await _method.invokeMethod<int>('getYtDlpLastUpdateTime');
+    return time ?? 0;
   }
 }

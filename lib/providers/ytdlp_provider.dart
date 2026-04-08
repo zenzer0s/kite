@@ -2,6 +2,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/download_service.dart';
 
+enum YtdlpChannel { stable, nightly, master }
+
+enum YtdlpUpdateInterval { off, daily, weekly, monthly }
+
+extension YtdlpIntervalExtension on YtdlpUpdateInterval {
+  Duration? get duration {
+    switch (this) {
+      case YtdlpUpdateInterval.daily:
+        return const Duration(days: 1);
+      case YtdlpUpdateInterval.weekly:
+        return const Duration(days: 7);
+      case YtdlpUpdateInterval.monthly:
+        return const Duration(days: 30);
+      case YtdlpUpdateInterval.off:
+        return null;
+    }
+  }
+}
+
 final ytdlpProvider = NotifierProvider<YtdlpNotifier, YtdlpState>(() {
   return YtdlpNotifier();
 });
@@ -10,6 +29,9 @@ class YtdlpState {
   final String version;
   final bool isUpdating;
   final bool autoUpdate;
+  final YtdlpChannel channel;
+  final YtdlpUpdateInterval interval;
+  final DateTime? lastUpdateTime;
   final String? lastError;
   final String? lastStatus;
 
@@ -17,6 +39,9 @@ class YtdlpState {
     required this.version,
     required this.isUpdating,
     required this.autoUpdate,
+    required this.channel,
+    required this.interval,
+    this.lastUpdateTime,
     this.lastError,
     this.lastStatus,
   });
@@ -25,6 +50,9 @@ class YtdlpState {
     String? version,
     bool? isUpdating,
     bool? autoUpdate,
+    YtdlpChannel? channel,
+    YtdlpUpdateInterval? interval,
+    DateTime? lastUpdateTime,
     String? lastError,
     String? lastStatus,
   }) {
@@ -32,59 +60,91 @@ class YtdlpState {
       version: version ?? this.version,
       isUpdating: isUpdating ?? this.isUpdating,
       autoUpdate: autoUpdate ?? this.autoUpdate,
-      lastError: lastError,
+      channel: channel ?? this.channel,
+      interval: interval ?? this.interval,
+      lastUpdateTime: lastUpdateTime ?? this.lastUpdateTime,
+      lastError: lastError, // Reset on every copy unless explicitly provided
       lastStatus: lastStatus,
     );
   }
 }
 
 class YtdlpNotifier extends Notifier<YtdlpState> {
-  static const _lastUpdateKey = 'ytdlp_last_update_time';
+  static const _channelKey = 'ytdlp_update_channel';
+  static const _intervalKey = 'ytdlp_auto_update_interval';
   static const _autoUpdateKey = 'ytdlp_auto_update';
-  static const _updateIntervalMs = 7 * 24 * 60 * 60 * 1000;
-  bool _started = false;
+  
+  bool _initialized = false;
 
   @override
   YtdlpState build() {
-    if (!_started) {
-      _started = true;
+    if (!_initialized) {
+      _initialized = true;
       Future<void>.microtask(_init);
     }
     return const YtdlpState(
       version: 'Checking...',
       isUpdating: false,
       autoUpdate: true,
+      channel: YtdlpChannel.stable,
+      interval: YtdlpUpdateInterval.weekly,
       lastStatus: null,
     );
   }
 
   Future<void> _init() async {
     final prefs = await SharedPreferences.getInstance();
+    
     final autoUpdate = prefs.getBool(_autoUpdateKey) ?? true;
-    state = state.copyWith(autoUpdate: autoUpdate);
+    final channelIndex = prefs.getInt(_channelKey) ?? 0;
+    final intervalIndex = prefs.getInt(_intervalKey) ?? 2; // Default to weekly
+
+    final lastUpdateMillis = await DownloadService.getYtDlpLastUpdateTime();
+    final lastUpdateTime = lastUpdateMillis > 0 
+        ? DateTime.fromMillisecondsSinceEpoch(lastUpdateMillis) 
+        : null;
+
+    state = state.copyWith(
+      autoUpdate: autoUpdate,
+      channel: YtdlpChannel.values[channelIndex],
+      interval: YtdlpUpdateInterval.values[intervalIndex],
+      lastUpdateTime: lastUpdateTime,
+    );
 
     final version = await _readVersion();
     if (version != null) {
-      state = state.copyWith(
-        version: version,
-        lastError: null,
-        lastStatus: null,
-      );
+      state = state.copyWith(version: version);
     }
 
-    final lastUpdate = prefs.getInt(_lastUpdateKey) ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final needsUpdate = now - lastUpdate > _updateIntervalMs;
-
-    if ((autoUpdate && needsUpdate) || version == null) {
+    // Check for auto update
+    if (autoUpdate && version != null) {
+      final intervalDuration = state.interval.duration;
+      if (intervalDuration != null && lastUpdateTime != null) {
+        final nextUpdateTime = lastUpdateTime.add(intervalDuration);
+        if (DateTime.now().isAfter(nextUpdateTime)) {
+          await update();
+        }
+      } else if (lastUpdateTime == null) {
+        // First run or manual reset
+        await update();
+      }
+    } else if (version == null) {
+      // Missing engine, force update
       await update();
     }
   }
 
-  Future<void> toggleAutoUpdate(bool value) async {
+  Future<void> setChannel(YtdlpChannel channel) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_autoUpdateKey, value);
-    state = state.copyWith(autoUpdate: value);
+    await prefs.setInt(_channelKey, channel.index);
+    state = state.copyWith(channel: channel);
+  }
+
+  Future<void> setInterval(YtdlpUpdateInterval interval) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_intervalKey, interval.index);
+    state = state.copyWith(interval: interval, autoUpdate: interval != YtdlpUpdateInterval.off);
+    await prefs.setBool(_autoUpdateKey, interval != YtdlpUpdateInterval.off);
   }
 
   Future<String?> _readVersion() async {
@@ -95,56 +155,38 @@ class YtdlpNotifier extends Notifier<YtdlpState> {
     return version;
   }
 
-  Future<void> fetchVersion() async {
-    try {
-      final version = await _readVersion();
-      state = state.copyWith(
-        version: version ?? 'Unknown',
-        lastError: null,
-        lastStatus: null,
-      );
-    } catch (e) {
-      state = state.copyWith(
-        version: 'Unknown',
-        lastError: e.toString(),
-        lastStatus: null,
-      );
-    }
-  }
-
   String _mapStatus(String status) {
     switch (status) {
       case 'DONE':
-        return 'Updated';
+        return 'Successfully Updated';
       case 'ALREADY_UP_TO_DATE':
-        return 'Up to date';
+        return 'Engine is up to date';
       default:
         return status;
     }
   }
 
-  Future<void> _runUpdate() async {
-    final status = await DownloadService.updateYtDlp();
-    if (status != 'ERROR') {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt(_lastUpdateKey, DateTime.now().millisecondsSinceEpoch);
-    }
-    final version = await _readVersion();
-    state = state.copyWith(
-      version: version ?? 'Unknown',
-      isUpdating: false,
-      lastError: status == 'ERROR' ? status : null,
-      lastStatus: status == 'ERROR' ? null : _mapStatus(status),
-    );
-  }
-
   Future<void> update() async {
     if (state.isUpdating) return;
-    state = state.copyWith(isUpdating: true, lastError: null);
+    state = state.copyWith(isUpdating: true, lastError: null, lastStatus: 'Checking for updates...');
+    
     try {
-      await _runUpdate();
+      final status = await DownloadService.updateYtDlp(channel: state.channel.name);
+      final version = await _readVersion();
+      final lastUpdateMillis = await DownloadService.getYtDlpLastUpdateTime();
+      
+      state = state.copyWith(
+        version: version ?? 'Unknown',
+        isUpdating: false,
+        lastUpdateTime: DateTime.fromMillisecondsSinceEpoch(lastUpdateMillis),
+        lastStatus: _mapStatus(status),
+      );
     } catch (e) {
-      state = state.copyWith(isUpdating: false, lastError: e.toString());
+      state = state.copyWith(
+        isUpdating: false, 
+        lastError: e.toString(),
+        lastStatus: 'Update failed',
+      );
     }
   }
 }

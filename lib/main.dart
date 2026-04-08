@@ -8,6 +8,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/downloads/downloads_screen.dart';
 import 'widgets/floating_nav_toolbar.dart';
 import 'services/download_service.dart';
+import 'providers/ytdlp_provider.dart';
 
 final navigationProvider = NotifierProvider<_NavNotifier, int>(
   _NavNotifier.new,
@@ -40,6 +41,7 @@ class KiteApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeProvider);
+    ref.watch(ytdlpProvider); // Trigger auto-update check on startup
     final isDark = themeMode == ThemeMode.dark;
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(

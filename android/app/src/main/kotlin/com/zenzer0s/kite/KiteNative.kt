@@ -22,6 +22,53 @@ import java.net.URL
 object KiteNative {
 
     private const val PREFS_NAME = "FlutterSharedPreferences"
+    private const val YT_DLP_UPDATE_TIME_KEY = "flutter.yt_dlp_last_update"
+
+    /**
+     * Triggers an engine update for yt-dlp.
+     */
+    suspend fun updateYtDlp(context: Context, channelName: String): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                KiteApp.awaitNativeToolsReady().getOrThrow()
+                
+                val channel = when (channelName.lowercase()) {
+                    "nightly" -> YoutubeDL.UpdateChannel.NIGHTLY
+                    "master" -> YoutubeDL.UpdateChannel.MASTER
+                    else -> YoutubeDL.UpdateChannel.STABLE
+                }
+
+                val status = YoutubeDL.getInstance().updateYoutubeDL(context, channel)
+                
+                // Update the last check time regardless of whether a new version was found
+                val now = System.currentTimeMillis()
+                context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putLong(YT_DLP_UPDATE_TIME_KEY, now)
+                    .apply()
+
+                status == YoutubeDL.UpdateStatus.DONE
+            } catch (e: Exception) {
+                Log.e("KiteNative", "Failed to update yt-dlp", e)
+                false
+            }
+        }
+    }
+
+    /**
+     * Gets the current local version of yt-dlp.
+     */
+    fun getYtDlpVersion(context: Context): String {
+        return YoutubeDL.getInstance().version(context) ?: "Unknown"
+    }
+
+    /**
+     * Gets the last time an update check was performed.
+     */
+    fun getYtDlpLastUpdateTime(context: Context): Long {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getLong(YT_DLP_UPDATE_TIME_KEY, 0L)
+    }
 
     /**
      * Pre-warms the Python environment by running a small command.

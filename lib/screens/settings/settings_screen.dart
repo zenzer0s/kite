@@ -8,6 +8,7 @@ import '../../providers/theme_provider.dart';
 import '../../providers/ytdlp_provider.dart';
 import '../login/login_screen.dart';
 import 'telegram_settings_screen.dart';
+import 'widgets/ytdlp_update_bottom_sheet.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -242,29 +243,19 @@ class SettingsScreen extends ConsumerWidget {
                   cs: cs,
                 ),
                 _SettingsTile(
-                  title: 'Auto-update yt-dlp',
-                  subtitle: 'Check for updates in background',
-                  icon: Icons.update_rounded,
-                  cs: cs,
-                  trailing: Switch(
-                    value: ytdlp.autoUpdate,
-                    onChanged: (val) {
-                      HapticFeedback.lightImpact();
-                      ref.read(ytdlpProvider.notifier).toggleAutoUpdate(val);
-                    },
-                  ),
-                ),
-                _SettingsTile(
-                  title: 'yt-dlp Version',
+                  title: 'yt-dlp Engine',
                   subtitle: ytdlpSubtitle,
                   icon: Icons.terminal_rounded,
                   cs: cs,
-                  trailing: Icon(Icons.refresh_rounded, color: cs.outline),
+                  trailing: Icon(Icons.chevron_right_rounded, color: cs.outline),
                   onTap: () {
-                    if (!ytdlp.isUpdating) {
-                      HapticFeedback.lightImpact();
-                      ref.read(ytdlpProvider.notifier).update();
-                    }
+                    HapticFeedback.lightImpact();
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => const YtdlpUpdateBottomSheet(),
+                    );
                   },
                 ),
               ],
