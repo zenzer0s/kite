@@ -1,4 +1,4 @@
-name: Release ARM64
+name: Production Release
 
 on:
   workflow_dispatch:
@@ -13,6 +13,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for changelog generation
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -56,6 +58,7 @@ jobs:
           name: ${{ steps.version.outputs.release_name }}
           draft: false
           prerelease: false
+          generate_release_notes: true
           files: |
             build/app/outputs/flutter-apk/app-release.apk
         env:
