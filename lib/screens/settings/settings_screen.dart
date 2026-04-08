@@ -11,6 +11,9 @@ import '../about/about_screen.dart';
 import '../login/login_screen.dart';
 import 'telegram_settings_screen.dart';
 import 'widgets/ytdlp_update_bottom_sheet.dart';
+import 'app_update_screen.dart';
+import 'widgets/settings_widgets.dart';
+import '../../providers/update_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -21,6 +24,7 @@ class SettingsScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeProvider);
     final ytdlp = ref.watch(ytdlpProvider);
     final settings = ref.watch(settingsProvider);
+    final update = ref.watch(updateProvider);
     final isDark = themeMode == ThemeMode.dark;
     
     final ytdlpSubtitle = ytdlp.isUpdating
@@ -48,11 +52,11 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
-            _SettingsGroup(
+            SettingsGroup(
               title: 'Engine',
               cs: cs,
               children: [
-                _SettingsTile(
+                SettingsTile(
                   title: 'Engine Updates',
                   subtitle: ytdlpSubtitle,
                   icon: PhosphorIcons.cpu(),
@@ -68,14 +72,27 @@ class SettingsScreen extends ConsumerWidget {
                     );
                   },
                 ),
+                SettingsTile(
+                  title: 'App Updates',
+                  subtitle: 'v${update.currentVersion}',
+                  icon: PhosphorIcons.arrowClockwise(),
+                  cs: cs,
+                  trailing: Icon(Icons.chevron_right_rounded, color: cs.outline),
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AppUpdateScreen()),
+                    );
+                  },
+                ),
               ],
             ),
             const SizedBox(height: 16),
-            _SettingsGroup(
+            SettingsGroup(
               title: 'Appearance',
               cs: cs,
               children: [
-                _SettingsTile(
+                SettingsTile(
                   title: 'Dark Mode',
                   subtitle: isDark ? 'Sleek & Professional' : 'Bright & Clear',
                   icon: isDark ? PhosphorIcons.moon() : PhosphorIcons.sun(),
@@ -91,11 +108,11 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            _SettingsGroup(
+            SettingsGroup(
               title: 'Download',
               cs: cs,
               children: [
-                _SettingsTile(
+                SettingsTile(
                   title: 'Download Directory',
                   subtitle: settings.downloadDir,
                   icon: PhosphorIcons.folder(),
@@ -107,7 +124,7 @@ class SettingsScreen extends ConsumerWidget {
                   onTap: () =>
                       _pickDirectory(context, ref, settings.downloadDir),
                 ),
-                _SettingsTile(
+                SettingsTile(
                   title: 'Download Behavior',
                   subtitle: settings.defaultFormat == DefaultFormat.auto
                       ? 'Auto (Best Quality)'
@@ -118,7 +135,7 @@ class SettingsScreen extends ConsumerWidget {
                   cs: cs,
                   onTap: () => _showFormatDialog(context, ref, settings),
                 ),
-                _SettingsTile(
+                SettingsTile(
                   title: 'Concurrent Downloads',
                   subtitle: '${settings.concurrentDownloads} simultaneous',
                   icon: PhosphorIcons.stack(),
@@ -136,11 +153,11 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            _SettingsGroup(
+            SettingsGroup(
               title: 'Accounts',
               cs: cs,
               children: [
-                _SettingsTile(
+                SettingsTile(
                   title: 'Instagram',
                   subtitle: settings.kiteCookies?.contains('ds_user_id') == true 
                       ? 'Authenticated' 
@@ -159,7 +176,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                _SettingsTile(
+                SettingsTile(
                   title: 'YouTube',
                   subtitle: settings.kiteCookies?.contains('SAPISID') == true 
                       ? 'Authenticated' 
@@ -175,7 +192,7 @@ class SettingsScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                _SettingsTile(
+                SettingsTile(
                   title: 'Sign Out All Accounts',
                   subtitle: settings.kiteCookies != null 
                              ? 'Clear all sessions and flush cookies' 
@@ -226,11 +243,11 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            _SettingsGroup(
+            SettingsGroup(
               title: 'Telegram',
               cs: cs,
               children: [
-                _SettingsTile(
+                SettingsTile(
                   title: 'Telegram Integration',
                   subtitle: settings.telegramUpload
                       ? 'Auto-upload enabled'
@@ -250,17 +267,17 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            _SettingsGroup(
+            SettingsGroup(
               title: 'Advanced',
               cs: cs,
               children: [_BatteryOptimizationTile(cs: cs)],
             ),
             const SizedBox(height: 16),
-            _SettingsGroup(
+            SettingsGroup(
               title: 'About',
               cs: cs,
               children: [
-                _SettingsTile(
+                SettingsTile(
                   title: 'About Kite',
                   subtitle: 'Developer info, links, and support',
                   icon: PhosphorIcons.info(),
@@ -438,129 +455,6 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _SettingsGroup extends StatelessWidget {
-  final String title;
-  final ColorScheme cs;
-  final List<Widget> children;
-
-  const _SettingsGroup({
-    required this.title,
-    required this.cs,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(
-            title,
-            style: GoogleFonts.outfit(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: cs.primary,
-            ),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: cs.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Column(
-              children: children
-                  .asMap()
-                  .entries
-                  .map(
-                    (e) => Column(
-                      children: [
-                        e.value,
-                        if (e.key < children.length - 1)
-                          Divider(
-                            height: 1,
-                            color: cs.outlineVariant.withValues(alpha: 0.5),
-                            indent: 66,
-                          ),
-                      ],
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SettingsTile extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final ColorScheme cs;
-  final Widget? trailing;
-  final VoidCallback? onTap;
-
-  const _SettingsTile({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.cs,
-    this.trailing,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: cs.primaryContainer.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: cs.onPrimaryContainer, size: 18),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.outfit(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: cs.onSurface,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.outfit(fontSize: 12, color: cs.outline),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) trailing!,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _BatteryOptimizationTile extends StatefulWidget {
   final ColorScheme cs;
 
@@ -600,7 +494,7 @@ class _BatteryOptimizationTileState extends State<_BatteryOptimizationTile> {
 
   @override
   Widget build(BuildContext context) {
-    return _SettingsTile(
+    return SettingsTile(
       title: 'Ignore Battery Optimizations',
       subtitle: _isIgnoring
           ? 'Unrestricted background downloads'

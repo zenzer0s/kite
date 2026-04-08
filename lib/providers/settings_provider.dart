@@ -16,6 +16,7 @@ class AppSettings {
   final bool fastMode;
   final String? kiteCookies;
   final bool initialized;
+  final bool autoCheckUpdates;
 
   const AppSettings({
     required this.downloadDir,
@@ -27,6 +28,7 @@ class AppSettings {
     this.fastMode = false,
     this.kiteCookies,
     this.initialized = false,
+    this.autoCheckUpdates = true,
   });
 
   AppSettings copyWith({
@@ -39,6 +41,7 @@ class AppSettings {
     bool? fastMode,
     String? kiteCookies,
     bool? initialized,
+    bool? autoCheckUpdates,
   }) {
     return AppSettings(
       downloadDir: downloadDir ?? this.downloadDir,
@@ -50,6 +53,7 @@ class AppSettings {
       fastMode: fastMode ?? this.fastMode,
       kiteCookies: kiteCookies ?? this.kiteCookies,
       initialized: initialized ?? this.initialized,
+      autoCheckUpdates: autoCheckUpdates ?? this.autoCheckUpdates,
     );
   }
 
@@ -70,6 +74,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _telegramUploadKey = 'telegram_upload';
   static const _fastModeKey = 'fast_mode';
   static const _cookiesKey = 'kite_cookies';
+  static const _autoCheckUpdatesKey = 'auto_check_updates';
 
   static const String defaultDir = '/storage/emulated/0/Download/Kite';
 
@@ -115,6 +120,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
         fastMode: prefs.getBool(_fastModeKey) ?? false,
         kiteCookies: prefs.getString(_cookiesKey),
         initialized: true,
+        autoCheckUpdates: prefs.getBool(_autoCheckUpdatesKey) ?? true,
       );
     } catch (e) {
       state = state.copyWith(initialized: true);
@@ -194,5 +200,11 @@ class SettingsNotifier extends Notifier<AppSettings> {
       await prefs.setString(_cookiesKey, cookies);
     }
     state = state.copyWith(kiteCookies: cookies);
+  }
+
+  Future<void> setAutoCheckUpdates(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoCheckUpdatesKey, enabled);
+    state = state.copyWith(autoCheckUpdates: enabled);
   }
 }

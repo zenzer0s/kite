@@ -11,6 +11,7 @@
         android:label="Kite"
         android:name=".KiteApp"
         android:extractNativeLibs="true"
+        android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/launcher_icon">
         <activity
             android:name=".MainActivity"
