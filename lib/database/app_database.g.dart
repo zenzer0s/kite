@@ -104,6 +104,32 @@ class $DownloadedItemsTable extends DownloadedItems
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _qualityMeta = const VerificationMeta(
+    'quality',
+  );
+  @override
+  late final GeneratedColumn<String> quality = GeneratedColumn<String>(
+    'quality',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nativeUploadedMeta = const VerificationMeta(
+    'nativeUploaded',
+  );
+  @override
+  late final GeneratedColumn<bool> nativeUploaded = GeneratedColumn<bool>(
+    'native_uploaded',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("native_uploaded" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -115,6 +141,8 @@ class $DownloadedItemsTable extends DownloadedItems
     ext,
     duration,
     downloadedAt,
+    quality,
+    nativeUploaded,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -198,6 +226,21 @@ class $DownloadedItemsTable extends DownloadedItems
     } else if (isInserting) {
       context.missing(_downloadedAtMeta);
     }
+    if (data.containsKey('quality')) {
+      context.handle(
+        _qualityMeta,
+        quality.isAcceptableOrUnknown(data['quality']!, _qualityMeta),
+      );
+    }
+    if (data.containsKey('native_uploaded')) {
+      context.handle(
+        _nativeUploadedMeta,
+        nativeUploaded.isAcceptableOrUnknown(
+          data['native_uploaded']!,
+          _nativeUploadedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -243,6 +286,14 @@ class $DownloadedItemsTable extends DownloadedItems
         DriftSqlType.dateTime,
         data['${effectivePrefix}downloaded_at'],
       )!,
+      quality: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}quality'],
+      ),
+      nativeUploaded: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}native_uploaded'],
+      )!,
     );
   }
 
@@ -262,6 +313,8 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
   final String ext;
   final int duration;
   final DateTime downloadedAt;
+  final String? quality;
+  final bool nativeUploaded;
   const DownloadedItem({
     required this.id,
     required this.title,
@@ -272,6 +325,8 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
     required this.ext,
     required this.duration,
     required this.downloadedAt,
+    this.quality,
+    required this.nativeUploaded,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -285,6 +340,10 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
     map['ext'] = Variable<String>(ext);
     map['duration'] = Variable<int>(duration);
     map['downloaded_at'] = Variable<DateTime>(downloadedAt);
+    if (!nullToAbsent || quality != null) {
+      map['quality'] = Variable<String>(quality);
+    }
+    map['native_uploaded'] = Variable<bool>(nativeUploaded);
     return map;
   }
 
@@ -299,6 +358,10 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
       ext: Value(ext),
       duration: Value(duration),
       downloadedAt: Value(downloadedAt),
+      quality: quality == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quality),
+      nativeUploaded: Value(nativeUploaded),
     );
   }
 
@@ -317,6 +380,8 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
       ext: serializer.fromJson<String>(json['ext']),
       duration: serializer.fromJson<int>(json['duration']),
       downloadedAt: serializer.fromJson<DateTime>(json['downloadedAt']),
+      quality: serializer.fromJson<String?>(json['quality']),
+      nativeUploaded: serializer.fromJson<bool>(json['nativeUploaded']),
     );
   }
   @override
@@ -332,6 +397,8 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
       'ext': serializer.toJson<String>(ext),
       'duration': serializer.toJson<int>(duration),
       'downloadedAt': serializer.toJson<DateTime>(downloadedAt),
+      'quality': serializer.toJson<String?>(quality),
+      'nativeUploaded': serializer.toJson<bool>(nativeUploaded),
     };
   }
 
@@ -345,6 +412,8 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
     String? ext,
     int? duration,
     DateTime? downloadedAt,
+    Value<String?> quality = const Value.absent(),
+    bool? nativeUploaded,
   }) => DownloadedItem(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -355,6 +424,8 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
     ext: ext ?? this.ext,
     duration: duration ?? this.duration,
     downloadedAt: downloadedAt ?? this.downloadedAt,
+    quality: quality.present ? quality.value : this.quality,
+    nativeUploaded: nativeUploaded ?? this.nativeUploaded,
   );
   DownloadedItem copyWithCompanion(DownloadedItemsCompanion data) {
     return DownloadedItem(
@@ -369,6 +440,10 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
       downloadedAt: data.downloadedAt.present
           ? data.downloadedAt.value
           : this.downloadedAt,
+      quality: data.quality.present ? data.quality.value : this.quality,
+      nativeUploaded: data.nativeUploaded.present
+          ? data.nativeUploaded.value
+          : this.nativeUploaded,
     );
   }
 
@@ -383,7 +458,9 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
           ..write('filePath: $filePath, ')
           ..write('ext: $ext, ')
           ..write('duration: $duration, ')
-          ..write('downloadedAt: $downloadedAt')
+          ..write('downloadedAt: $downloadedAt, ')
+          ..write('quality: $quality, ')
+          ..write('nativeUploaded: $nativeUploaded')
           ..write(')'))
         .toString();
   }
@@ -399,6 +476,8 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
     ext,
     duration,
     downloadedAt,
+    quality,
+    nativeUploaded,
   );
   @override
   bool operator ==(Object other) =>
@@ -412,7 +491,9 @@ class DownloadedItem extends DataClass implements Insertable<DownloadedItem> {
           other.filePath == this.filePath &&
           other.ext == this.ext &&
           other.duration == this.duration &&
-          other.downloadedAt == this.downloadedAt);
+          other.downloadedAt == this.downloadedAt &&
+          other.quality == this.quality &&
+          other.nativeUploaded == this.nativeUploaded);
 }
 
 class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
@@ -425,6 +506,8 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
   final Value<String> ext;
   final Value<int> duration;
   final Value<DateTime> downloadedAt;
+  final Value<String?> quality;
+  final Value<bool> nativeUploaded;
   const DownloadedItemsCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
@@ -435,6 +518,8 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
     this.ext = const Value.absent(),
     this.duration = const Value.absent(),
     this.downloadedAt = const Value.absent(),
+    this.quality = const Value.absent(),
+    this.nativeUploaded = const Value.absent(),
   });
   DownloadedItemsCompanion.insert({
     this.id = const Value.absent(),
@@ -446,6 +531,8 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
     required String ext,
     required int duration,
     required DateTime downloadedAt,
+    this.quality = const Value.absent(),
+    this.nativeUploaded = const Value.absent(),
   }) : title = Value(title),
        uploader = Value(uploader),
        url = Value(url),
@@ -464,6 +551,8 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
     Expression<String>? ext,
     Expression<int>? duration,
     Expression<DateTime>? downloadedAt,
+    Expression<String>? quality,
+    Expression<bool>? nativeUploaded,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -475,6 +564,8 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
       if (ext != null) 'ext': ext,
       if (duration != null) 'duration': duration,
       if (downloadedAt != null) 'downloaded_at': downloadedAt,
+      if (quality != null) 'quality': quality,
+      if (nativeUploaded != null) 'native_uploaded': nativeUploaded,
     });
   }
 
@@ -488,6 +579,8 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
     Value<String>? ext,
     Value<int>? duration,
     Value<DateTime>? downloadedAt,
+    Value<String?>? quality,
+    Value<bool>? nativeUploaded,
   }) {
     return DownloadedItemsCompanion(
       id: id ?? this.id,
@@ -499,6 +592,8 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
       ext: ext ?? this.ext,
       duration: duration ?? this.duration,
       downloadedAt: downloadedAt ?? this.downloadedAt,
+      quality: quality ?? this.quality,
+      nativeUploaded: nativeUploaded ?? this.nativeUploaded,
     );
   }
 
@@ -532,6 +627,12 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
     if (downloadedAt.present) {
       map['downloaded_at'] = Variable<DateTime>(downloadedAt.value);
     }
+    if (quality.present) {
+      map['quality'] = Variable<String>(quality.value);
+    }
+    if (nativeUploaded.present) {
+      map['native_uploaded'] = Variable<bool>(nativeUploaded.value);
+    }
     return map;
   }
 
@@ -546,7 +647,9 @@ class DownloadedItemsCompanion extends UpdateCompanion<DownloadedItem> {
           ..write('filePath: $filePath, ')
           ..write('ext: $ext, ')
           ..write('duration: $duration, ')
-          ..write('downloadedAt: $downloadedAt')
+          ..write('downloadedAt: $downloadedAt, ')
+          ..write('quality: $quality, ')
+          ..write('nativeUploaded: $nativeUploaded')
           ..write(')'))
         .toString();
   }
@@ -576,6 +679,8 @@ typedef $$DownloadedItemsTableCreateCompanionBuilder =
       required String ext,
       required int duration,
       required DateTime downloadedAt,
+      Value<String?> quality,
+      Value<bool> nativeUploaded,
     });
 typedef $$DownloadedItemsTableUpdateCompanionBuilder =
     DownloadedItemsCompanion Function({
@@ -588,6 +693,8 @@ typedef $$DownloadedItemsTableUpdateCompanionBuilder =
       Value<String> ext,
       Value<int> duration,
       Value<DateTime> downloadedAt,
+      Value<String?> quality,
+      Value<bool> nativeUploaded,
     });
 
 class $$DownloadedItemsTableFilterComposer
@@ -641,6 +748,16 @@ class $$DownloadedItemsTableFilterComposer
 
   ColumnFilters<DateTime> get downloadedAt => $composableBuilder(
     column: $table.downloadedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get quality => $composableBuilder(
+    column: $table.quality,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get nativeUploaded => $composableBuilder(
+    column: $table.nativeUploaded,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -698,6 +815,16 @@ class $$DownloadedItemsTableOrderingComposer
     column: $table.downloadedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get quality => $composableBuilder(
+    column: $table.quality,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get nativeUploaded => $composableBuilder(
+    column: $table.nativeUploaded,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadedItemsTableAnnotationComposer
@@ -735,6 +862,14 @@ class $$DownloadedItemsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get downloadedAt => $composableBuilder(
     column: $table.downloadedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get quality =>
+      $composableBuilder(column: $table.quality, builder: (column) => column);
+
+  GeneratedColumn<bool> get nativeUploaded => $composableBuilder(
+    column: $table.nativeUploaded,
     builder: (column) => column,
   );
 }
@@ -785,6 +920,8 @@ class $$DownloadedItemsTableTableManager
                 Value<String> ext = const Value.absent(),
                 Value<int> duration = const Value.absent(),
                 Value<DateTime> downloadedAt = const Value.absent(),
+                Value<String?> quality = const Value.absent(),
+                Value<bool> nativeUploaded = const Value.absent(),
               }) => DownloadedItemsCompanion(
                 id: id,
                 title: title,
@@ -795,6 +932,8 @@ class $$DownloadedItemsTableTableManager
                 ext: ext,
                 duration: duration,
                 downloadedAt: downloadedAt,
+                quality: quality,
+                nativeUploaded: nativeUploaded,
               ),
           createCompanionCallback:
               ({
@@ -807,6 +946,8 @@ class $$DownloadedItemsTableTableManager
                 required String ext,
                 required int duration,
                 required DateTime downloadedAt,
+                Value<String?> quality = const Value.absent(),
+                Value<bool> nativeUploaded = const Value.absent(),
               }) => DownloadedItemsCompanion.insert(
                 id: id,
                 title: title,
@@ -817,6 +958,8 @@ class $$DownloadedItemsTableTableManager
                 ext: ext,
                 duration: duration,
                 downloadedAt: downloadedAt,
+                quality: quality,
+                nativeUploaded: nativeUploaded,
               ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))

@@ -253,6 +253,7 @@ object KiteNative {
                 put("ext", info.ext)
                 put("duration", info.duration)
                 put("downloaded_at", System.currentTimeMillis() / 1000L)
+                put("quality", info.quality)
             }
             
             val id = db.insert("downloaded_items", null, cv)
@@ -438,7 +439,6 @@ object KiteNative {
             else -> "application/octet-stream"
         }
     }
-
     data class DownloadMetadata(
         val title: String,
         val uploader: String,
@@ -446,6 +446,7 @@ object KiteNative {
         val thumbnail: String,
         val filePath: String,
         val ext: String,
-        val duration: Int
+        val duration: Int,
+        val quality: String? = null
     )
 }

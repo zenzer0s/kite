@@ -22,16 +22,21 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final historyAsync = ref.watch(downloadHistoryProvider);
 
     final running = tasks.values
-        .where((t) =>
-            t.status == DownloadStatus.downloading ||
-            t.status == DownloadStatus.paused)
+        .where(
+          (t) =>
+              t.status == DownloadStatus.downloading ||
+              t.status == DownloadStatus.paused,
+        )
         .toList();
-    final queued =
-        tasks.values.where((t) => t.status == DownloadStatus.queued).toList();
-    final cancelled =
-        tasks.values.where((t) => t.status == DownloadStatus.cancelled).toList();
-    final errored =
-        tasks.values.where((t) => t.status == DownloadStatus.error).toList();
+    final queued = tasks.values
+        .where((t) => t.status == DownloadStatus.queued)
+        .toList();
+    final cancelled = tasks.values
+        .where((t) => t.status == DownloadStatus.cancelled)
+        .toList();
+    final errored = tasks.values
+        .where((t) => t.status == DownloadStatus.error)
+        .toList();
 
     return DefaultTabController(
       length: 5,
@@ -100,12 +105,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
             _TaskList(
               tasks: cancelled,
               emptyLabel: 'No cancelled tasks',
-              onClear: () => ref.read(downloadsProvider.notifier).clearCancelled(),
+              onClear: () =>
+                  ref.read(downloadsProvider.notifier).clearCancelled(),
             ),
             _TaskList(
               tasks: errored,
               emptyLabel: 'No errored tasks',
-              onClear: () => ref.read(downloadsProvider.notifier).clearErrored(),
+              onClear: () =>
+                  ref.read(downloadsProvider.notifier).clearErrored(),
             ),
             historyAsync.when(
               data: (items) => _HistoryList(items: items, cs: cs),
@@ -170,14 +177,17 @@ class _TaskList extends ConsumerWidget {
               final task = tasks[index];
               return QueueTaskCard(
                 task: task,
-                onCancel: () =>
-                    ref.read(downloadsProvider.notifier).cancelTask(task.taskId),
+                onCancel: () => ref
+                    .read(downloadsProvider.notifier)
+                    .cancelTask(task.taskId),
                 onPause: () =>
                     ref.read(downloadsProvider.notifier).pauseTask(task.taskId),
-                onResume: () =>
-                    ref.read(downloadsProvider.notifier).resumeTask(task.taskId),
-                onDismiss: () =>
-                    ref.read(downloadsProvider.notifier).dismissTask(task.taskId),
+                onResume: () => ref
+                    .read(downloadsProvider.notifier)
+                    .resumeTask(task.taskId),
+                onDismiss: () => ref
+                    .read(downloadsProvider.notifier)
+                    .dismissTask(task.taskId),
               );
             },
           ),
@@ -224,10 +234,10 @@ class _HistoryList extends ConsumerWidget {
             ),
             progress: 100,
             filePath: item.filePath,
+            quality: item.quality,
           ),
           onCancel: () {},
-          onDismiss: () =>
-              ref.read(databaseProvider).deleteDownload(item.id),
+          onDismiss: () => ref.read(databaseProvider).deleteDownload(item.id),
         );
       },
     );

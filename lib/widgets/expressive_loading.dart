@@ -12,8 +12,9 @@ class ExpressiveLoadingIndicator extends StatelessWidget {
           width: 100,
           height: 100,
           child: AndroidView(
-            viewType: 'com.zenzer0s.kite/expressive_loading',
-            creationParamsCodec: StandardMessageCodec(),
+            viewType: 'com.zenzer0s.kite/expressive_element',
+            creationParams: {'type': 'loading'},
+            creationParamsCodec: const StandardMessageCodec(),
           ),
         ),
       );

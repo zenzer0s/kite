@@ -129,7 +129,7 @@ class ShareActivity : ComponentActivity() {
             android.widget.Toast.makeText(this, "Kite: Downloading...", android.widget.Toast.LENGTH_SHORT).show()
             DownloadService.startDownload(
                 applicationContext, "T-${System.currentTimeMillis()}-${(100..999).random()}",
-                url, false, null, outputDir!!
+                url, false, null, null, outputDir!!
             )
             finish()
             return
@@ -561,7 +561,7 @@ class ShareActivity : ComponentActivity() {
         DownloadService.startDownload(
             applicationContext,
             taskId,
-            url, audioOnly, formatId, outputDir!!
+            url, audioOnly, formatId, null, outputDir!!
         )
         Toast.makeText(this, "Kite: 📡 Starting download...", Toast.LENGTH_SHORT).show()
         finish()

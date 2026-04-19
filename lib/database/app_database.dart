@@ -16,6 +16,8 @@ class DownloadedItems extends Table {
   TextColumn get ext => text()();
   IntColumn get duration => integer()();
   DateTimeColumn get downloadedAt => dateTime()();
+  TextColumn get quality => text().nullable()();
+  BoolColumn get nativeUploaded => boolean().withDefault(const Constant(false))();
 }
 
 @DriftDatabase(tables: [DownloadedItems])
@@ -23,7 +25,19 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 3;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(downloadedItems, downloadedItems.quality);
+          }
+          if (from < 3) {
+            await m.addColumn(downloadedItems, downloadedItems.nativeUploaded);
+          }
+        },
+      );
 
   Stream<List<DownloadedItem>> watchAllDownloads() =>
       (select(downloadedItems)..orderBy([(t) => OrderingTerm.desc(t.downloadedAt)])).watch();

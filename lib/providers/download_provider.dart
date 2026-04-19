@@ -4,7 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/download_service.dart';
 import 'database_provider.dart';
 
-enum DownloadStatus { idle, fetching, queued, downloading, paused, done, error, cancelled }
+enum DownloadStatus {
+  idle,
+  fetching,
+  queued,
+  downloading,
+  paused,
+  done,
+  error,
+  cancelled,
+}
 
 class DownloadState {
   final DownloadStatus status;
@@ -84,6 +93,8 @@ class DownloadTask {
   final String? targetExt;
   final String outputDir;
   final String? filePath;
+  final String? quality;
+  final bool nativeUploaded;
 
   const DownloadTask({
     required this.taskId,
@@ -95,6 +106,8 @@ class DownloadTask {
     this.targetExt,
     this.outputDir = '/storage/emulated/0/Download/Kite',
     this.filePath,
+    this.quality,
+    this.nativeUploaded = false,
   });
 
   DownloadTask copyWith({
@@ -103,6 +116,8 @@ class DownloadTask {
     String? currentLine,
     String? errorMessage,
     String? filePath,
+    String? quality,
+    bool? nativeUploaded,
   }) => DownloadTask(
     taskId: taskId,
     info: info,
@@ -113,6 +128,8 @@ class DownloadTask {
     targetExt: targetExt,
     outputDir: outputDir,
     filePath: filePath ?? this.filePath,
+    quality: quality ?? this.quality,
+    nativeUploaded: nativeUploaded ?? this.nativeUploaded,
   );
 }
 
@@ -148,6 +165,8 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
             status: DownloadStatus.downloading,
             progress: p.progress,
             currentLine: p.line,
+            quality: p.quality,
+            nativeUploaded: p.nativeUploaded,
           );
           _update(p.taskId, task);
         } else {
@@ -161,12 +180,14 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
           task.copyWith(status: DownloadStatus.error, errorMessage: p.error),
         );
       } else if (p.done) {
-        debugPrint('Kite: Download done native! Saving to history and Telegram: ${p.taskId}');
+        debugPrint(
+          'Kite: Download done native! Saving to history and Telegram: ${p.taskId}',
+        );
         if (_savedTaskIds.add(p.taskId)) {
           debugPrint('Kite: Download finished. Refreshing database stream...');
           ref.invalidate(downloadHistoryProvider);
         }
-        
+
         // Only set status to done if it wasn't already set to error by the Telegram uploader
         final currentTask = state[p.taskId];
         if (currentTask != null && currentTask.status != DownloadStatus.error) {
@@ -176,6 +197,7 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
               status: DownloadStatus.done,
               progress: 100,
               filePath: p.filePath,
+              nativeUploaded: p.nativeUploaded,
             ),
           );
         }
@@ -186,6 +208,7 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
             status: DownloadStatus.downloading,
             progress: p.progress,
             currentLine: p.line,
+            nativeUploaded: p.nativeUploaded,
           ),
         );
       }
@@ -202,14 +225,29 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
     String? formatId,
   }) async {
     try {
-      final taskId = 'T-${DateTime.now().millisecondsSinceEpoch}-${(100 + (900 * (DateTime.now().microsecond / 1000000))).toInt()}';
+      final taskId =
+          'T-${DateTime.now().millisecondsSinceEpoch}-${(100 + (900 * (DateTime.now().microsecond / 1000000))).toInt()}';
+
+      String? quality;
+      if (formatId != null) {
+        final f = info.formats.where((f) => f.formatId == formatId).firstOrNull;
+        if (f != null) {
+          if (audioOnly) {
+            quality = f.abr != null ? '${f.abr!.toInt()}kbps' : f.formatNote;
+          } else {
+            quality = f.height != null ? '${f.height}p' : f.resolution;
+          }
+        }
+      }
+
       final task = DownloadTask(
         taskId: taskId,
         info: info,
         status: DownloadStatus.queued, // Show it's queued instantly
         targetExt: audioOnly ? 'mp3' : 'mp4',
+        quality: quality ?? (audioOnly ? 'Best Audio' : 'Best Quality'),
       );
-      
+
       // Update state instantly!
       state = {...state, taskId: task};
 
@@ -218,6 +256,7 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
         audioOnly: audioOnly,
         formatId: formatId,
         taskId: taskId,
+        quality: task.quality,
       );
     } catch (e) {
       final errorTaskId = 'error_${DateTime.now().millisecondsSinceEpoch}';
@@ -276,5 +315,5 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
 
 final downloadsProvider =
     NotifierProvider<DownloadsNotifier, Map<String, DownloadTask>>(
-  DownloadsNotifier.new,
-);
+      DownloadsNotifier.new,
+    );

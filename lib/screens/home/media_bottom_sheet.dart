@@ -293,12 +293,15 @@ class _DataState extends StatelessWidget {
           height: 48,
           child: Theme.of(context).platform == TargetPlatform.android && !isTransparentOverlay
               ? AndroidView(
-                  viewType: 'com.zenzer0s.kite/quick_actions',
-                  creationParams: {'hasThumbnail': info.thumbnail.isNotEmpty},
+                  viewType: 'com.zenzer0s.kite/expressive_element',
+                  creationParams: {
+                    'type': 'quick_actions',
+                    'hasThumbnail': info.thumbnail.isNotEmpty
+                  },
                   creationParamsCodec: const StandardMessageCodec(),
                   onPlatformViewCreated: (id) {
                     final channel = MethodChannel(
-                      'com.zenzer0s.kite/quick_actions_$id',
+                      'com.zenzer0s.kite/expressive_$id',
                     );
                     channel.setMethodCallHandler((call) async {
                       if (call.method == 'onAction') {

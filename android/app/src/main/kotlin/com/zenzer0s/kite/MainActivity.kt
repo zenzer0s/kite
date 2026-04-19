@@ -28,8 +28,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 
-import com.zenzer0s.kite.expressive.ExpressiveLoadingViewFactory
-import com.zenzer0s.kite.expressive.ExpressiveQuickActionsViewFactory
+import com.zenzer0s.kite.expressive.ExpressiveViewFactory
 
 open class MainActivity : FlutterFragmentActivity() {
     companion object {
@@ -136,8 +135,7 @@ open class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        flutterEngine.platformViewsController.registry.registerViewFactory("com.zenzer0s.kite/expressive_loading", ExpressiveLoadingViewFactory())
-        flutterEngine.platformViewsController.registry.registerViewFactory("com.zenzer0s.kite/quick_actions", ExpressiveQuickActionsViewFactory(flutterEngine.dartExecutor.binaryMessenger))
+        flutterEngine.platformViewsController.registry.registerViewFactory("com.zenzer0s.kite/expressive_element", ExpressiveViewFactory(flutterEngine.dartExecutor.binaryMessenger))
 
         EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
@@ -209,12 +207,13 @@ open class MainActivity : FlutterFragmentActivity() {
                         val url = call.argument<String>("url") ?: return@setMethodCallHandler result.error("INVALID", "url required", null)
                         val audioOnly = call.argument<Boolean>("audioOnly") ?: false
                         val formatId = call.argument<String>("formatId")
+                        val quality = call.argument<String>("quality")
                         val outputDir = call.argument<String>("outputDir")
                             ?: File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kite").absolutePath
                         val passedTaskId = call.argument<String>("taskId")
 
                         val taskId = passedTaskId ?: "T-${System.currentTimeMillis()}-${(100..999).random()}"
-                        DownloadService.startDownload(applicationContext, taskId, url, audioOnly, formatId, outputDir)
+                        DownloadService.startDownload(applicationContext, taskId, url, audioOnly, formatId, quality, outputDir)
                         result.success(taskId)
                     }
 

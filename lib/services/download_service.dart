@@ -103,6 +103,7 @@ class DownloadProgress {
   final String? ext;
   final bool nativeUploaded;
   final String? filePath;
+  final String? quality;
 
   const DownloadProgress({
     required this.taskId,
@@ -118,6 +119,7 @@ class DownloadProgress {
     this.ext,
     this.nativeUploaded = false,
     this.filePath,
+    this.quality,
   });
 
   factory DownloadProgress.fromMap(Map map) => DownloadProgress(
@@ -134,6 +136,7 @@ class DownloadProgress {
     ext: map['ext'] as String?,
     nativeUploaded: map['nativeUploaded'] == true,
     filePath: map['filePath'] as String?,
+    quality: map['quality'] as String?,
   );
 }
 
@@ -157,7 +160,9 @@ class DownloadService {
       .map((e) => DownloadProgress.fromMap(e as Map));
 
   static Future<String> normalizeUrl(String url) async {
-    final normalized = await _method.invokeMethod<String>('normalizeUrl', {'url': url});
+    final normalized = await _method.invokeMethod<String>('normalizeUrl', {
+      'url': url,
+    });
     return normalized ?? url;
   }
 
@@ -174,6 +179,7 @@ class DownloadService {
     String? formatId,
     String? outputDir,
     String? taskId,
+    String? quality,
   }) async {
     final id = await _method.invokeMethod<String>('startDownload', {
       'url': url,
@@ -181,6 +187,7 @@ class DownloadService {
       'formatId': formatId,
       'outputDir': outputDir,
       'taskId': taskId,
+      'quality': quality,
     });
     return id!;
   }
@@ -217,7 +224,9 @@ class DownloadService {
   }
 
   static Future<String> updateYtDlp({String channel = 'stable'}) async {
-    final status = await _method.invokeMethod<String>('updateYtDlp', {'channel': channel});
+    final status = await _method.invokeMethod<String>('updateYtDlp', {
+      'channel': channel,
+    });
     return status ?? 'ALREADY_UP_TO_DATE';
   }
 

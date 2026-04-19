@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -26,112 +28,96 @@ class QueueTaskCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final isDone = task.status == DownloadStatus.done;
     final isError = task.status == DownloadStatus.error;
-    final isPaused = task.status == DownloadStatus.paused;
     final isCancelled = task.status == DownloadStatus.cancelled;
-    final isActive = task.status == DownloadStatus.downloading;
+    final isQueued = task.status == DownloadStatus.queued;
+
+    // Extract speed from currentLine if available
+    final speed = _extractSpeed(task.currentLine);
 
     return Container(
-      height: 150,
-      margin: const EdgeInsets.only(bottom: 12),
+      height: 180, // Reduced height for a more compact feel
+      margin: const EdgeInsets.only(bottom: 16),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: cs.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(
+          28,
+        ), // Slightly less rounded for better fit
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Stack(
         children: [
-          // Background Thumbnail
+          // Background Thumbnail with Overlay
           Positioned.fill(
             child: task.info.thumbnail.isNotEmpty
                 ? CachedNetworkImage(
                     imageUrl: task.info.thumbnail,
                     fit: BoxFit.cover,
-                    memCacheHeight: 300, // Optimized for 150 height card
+                    memCacheHeight: 360,
                     placeholder: (context, url) => _Placeholder(cs: cs),
                     errorWidget: (context, url, error) => _Placeholder(cs: cs),
                   )
                 : _Placeholder(cs: cs),
           ),
-
-          // Dark Overlay Gradient
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    Colors.black.withValues(alpha: 0.3),
-                    Colors.black.withValues(alpha: 0.8),
+                    Colors.black.withValues(alpha: 0.4),
+                    Colors.black.withValues(alpha: 0.85),
                   ],
                 ),
               ),
             ),
           ),
 
-          // Content
+          // Main Layout
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Header: Logo and Quality
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Top Left Icon
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        task.targetExt == 'mp3'
-                            ? PhosphorIcons.musicNote(PhosphorIconsStyle.fill)
-                            : PhosphorIcons.videoCamera(PhosphorIconsStyle.fill),
-                        size: 14,
-                        color: Colors.white,
-                      ),
+                    // Media Logo
+                    _ActionButton(
+                      icon: task.targetExt == 'mp3'
+                          ? PhosphorIcons.musicNote(PhosphorIconsStyle.fill)
+                          : PhosphorIcons.videoCamera(PhosphorIconsStyle.fill),
+                      cs: cs,
                     ),
 
-                    // "BEST QUALITY" Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Text(
-                        'BEST QUALITY',
-                        style: GoogleFonts.outfit(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white.withValues(alpha: 0.9),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
+                    // Quality Badge
+                    _ActionButton(
+                      icon: task.targetExt == 'mp3'
+                          ? PhosphorIcons.speakerHigh(PhosphorIconsStyle.fill)
+                          : PhosphorIcons.monitor(PhosphorIconsStyle.fill),
+                      label: _getQualityLabel(task),
+                      cs: cs,
                     ),
                   ],
                 ),
+
                 const Spacer(),
+
+                // Main Controls: Title and Play on the same line
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
@@ -139,66 +125,129 @@ class QueueTaskCard extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.outfit(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
                               color: Colors.white,
+                              letterSpacing: -0.2,
+                              height: 1.1,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                            Text(
-                            '${task.info.uploader} \u2022 ${_formatDuration(task.info.duration)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.outfit(
-                              fontSize: 12,
-                              color: Colors.white.withValues(alpha: 0.7),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          // Progress Info
                           Text(
-                            _buildProgressString(task),
+                            task.info.uploader,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.outfit(
-                              fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 13,
+                              color: Colors.white.withValues(alpha: 0.6),
                               fontWeight: FontWeight.w500,
+                              height: 1.1,
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: 12),
+                    Builder(
+                      builder: (context) {
+                        final fileExists =
+                            task.filePath != null &&
+                            File(task.filePath!).existsSync();
+                        final isCleaned = !fileExists && task.nativeUploaded;
 
-                    // Action Button (X)
-                    GestureDetector(
-                      onTap: isDone
-                          ? () {
-                              if (task.filePath != null) {
-                                DownloadService.openFile(task.filePath!);
-                              }
-                            }
-                          : (isCancelled || isError)
+                        return _ActionButton(
+                          icon: isDone
+                              ? (isCleaned
+                                    ? PhosphorIcons.cloudArrowUp(
+                                        PhosphorIconsStyle.fill,
+                                      )
+                                    : PhosphorIcons.play(
+                                        PhosphorIconsStyle.fill,
+                                      ))
+                              : (isCancelled || isError || isQueued)
+                              ? PhosphorIcons.x(PhosphorIconsStyle.bold)
+                              : PhosphorIcons.stop(PhosphorIconsStyle.fill),
+                          onTap: isDone
+                              ? () {
+                                  if (isCleaned) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Row(
+                                          children: [
+                                            Icon(
+                                              PhosphorIcons.telegramLogo(
+                                                PhosphorIconsStyle.fill,
+                                              ),
+                                              color: cs.primary,
+                                              size: 20,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              'Available on Telegram',
+                                              style: GoogleFonts.outfit(
+                                                color: cs.onSurface,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        backgroundColor:
+                                            cs.surfaceContainerHighest,
+                                        behavior: SnackBarBehavior.floating,
+                                        width: 240, // Compact width
+                                        elevation: 8,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                        ),
+                                        duration: const Duration(seconds: 2),
+                                      ),
+                                    );
+                                  } else if (task.filePath != null) {
+                                    DownloadService.openFile(task.filePath!);
+                                  }
+                                }
+                              : (isCancelled || isError || isQueued)
                               ? onDismiss
                               : onCancel,
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.2),
-                          ),
-                        ),
-                        child: Icon(
-                          isDone
-                              ? PhosphorIcons.play(PhosphorIconsStyle.fill)
-                              : PhosphorIcons.x(PhosphorIconsStyle.bold),
-                          color: Colors.white,
-                          size: 20,
-                        ),
+                          cs: cs,
+                          isMain: true,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+
+                const Spacer(),
+
+                // Footer: Progress Percentage, Bar, and Speed
+                Row(
+                  children: [
+                    Text(
+                      '${task.progress.toInt()}%',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ExpressiveWavyProgress(
+                        taskId: task.taskId,
+                        progress: (task.status == DownloadStatus.downloading || task.status == DownloadStatus.paused)
+                            ? task.progress / 100.0
+                            : (task.status == DownloadStatus.fetching || task.status == DownloadStatus.queued ? null : 0.0),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      speed,
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -206,55 +255,150 @@ class QueueTaskCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // Bottom Progress Bar
-          if (isActive || isPaused)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: LinearProgressIndicator(
-                value: task.progress / 100,
-                minHeight: 3,
-                backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isPaused ? Colors.white38 : cs.primary,
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  String _formatDuration(int seconds) {
-    if (seconds <= 0) return 'Unknown';
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  String _getQualityLabel(DownloadTask task) {
+    if (task.status == DownloadStatus.error) return 'Failed';
+    return task.quality ??
+        (task.targetExt == 'mp3' ? 'Best Audio' : 'Best Video');
   }
 
-  String _buildProgressString(DownloadTask task) {
-    if (task.status == DownloadStatus.error) {
-      return 'Error: ${task.errorMessage ?? 'Unknown'}';
+  String _extractSpeed(String? currentLine) {
+    if (currentLine == null) return '0 KB/s';
+    final match = RegExp(r'(\d+\.?\d*)\s*([KM]i?B/s)').firstMatch(currentLine);
+    if (match != null) return '${match.group(1)} ${match.group(2)}';
+    return '0 KB/s';
+  }
+}
+
+class _ExpressiveWavyProgress extends StatefulWidget {
+  final String taskId;
+  final double? progress;
+
+  const _ExpressiveWavyProgress({required this.taskId, this.progress});
+
+  @override
+  State<_ExpressiveWavyProgress> createState() => _ExpressiveWavyProgressState();
+}
+
+class _ExpressiveWavyProgressState extends State<_ExpressiveWavyProgress> {
+  MethodChannel? _channel;
+
+  @override
+  void didUpdateWidget(_ExpressiveWavyProgress oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.progress != widget.progress) {
+      _channel?.invokeMethod('updateProgress', widget.progress);
     }
-    if (task.status == DownloadStatus.cancelled) {
-      return 'Cancelled';
-    }
-    if (task.status == DownloadStatus.done) {
-      return 'Download Complete';
-    }
-    if (task.status == DownloadStatus.queued) {
-      return 'In Queue...';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 16,
+      child: AndroidView(
+        key: ValueKey('wavy_${widget.taskId}'),
+        viewType: 'com.zenzer0s.kite/expressive_element',
+        creationParams: {
+          'type': 'wavy_progress',
+          'progress': widget.progress,
+        },
+        creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: (id) {
+          _channel = MethodChannel('com.zenzer0s.kite/expressive_$id');
+        },
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final IconData? icon;
+  final String? label;
+  final VoidCallback? onTap;
+  final ColorScheme cs;
+  final bool isMain;
+
+  const _ActionButton({
+    this.icon,
+    this.label,
+    this.onTap,
+    required this.cs,
+    this.isMain = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (Theme.of(context).platform != TargetPlatform.android) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: label != null ? const EdgeInsets.symmetric(horizontal: 10, vertical: 4) : null,
+          width: label != null ? null : (isMain ? 56 : 44),
+          height: isMain ? 56 : (label != null ? 28 : 44),
+          decoration: BoxDecoration(
+            color: isMain ? cs.primaryContainer.withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) Icon(
+                icon,
+                color: isMain ? cs.onPrimaryContainer : Colors.white,
+                size: isMain ? 28 : 22,
+              ),
+              if (label != null) ...[
+                if (icon != null) const SizedBox(width: 6),
+                Text(
+                  label!,
+                  style: GoogleFonts.outfit(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
     }
 
-    final prefix = task.status == DownloadStatus.paused ? '[paused]' : '[download]';
-    final current = task.currentLine ?? '';
-    if (current.contains('%')) {
-      // Try to keep it clean like in the screenshot
-      return '$prefix ${task.progress.toStringAsFixed(1)}% \u2022 ${current.split('%').last.trim()}';
+    String? iconName;
+    if (icon != null) {
+      if (icon == PhosphorIcons.play(PhosphorIconsStyle.fill)) iconName = 'play';
+      else if (icon == PhosphorIcons.stop(PhosphorIconsStyle.fill)) iconName = 'stop';
+      else if (icon == PhosphorIcons.x(PhosphorIconsStyle.bold)) iconName = 'x';
+      else if (icon == PhosphorIcons.cloudArrowUp(PhosphorIconsStyle.fill)) iconName = 'cloud';
+      else if (icon == PhosphorIcons.musicNote(PhosphorIconsStyle.fill)) iconName = 'music';
+      else if (icon == PhosphorIcons.videoCamera(PhosphorIconsStyle.fill)) iconName = 'video';
     }
-    return '$prefix ${task.progress.toStringAsFixed(1)}%';
+
+    return SizedBox(
+      width: isMain ? 52 : (label != null ? 90 : 40),
+      height: isMain ? 40 : (label != null ? 32 : 32),
+      child: AndroidView(
+        viewType: 'com.zenzer0s.kite/expressive_element',
+        creationParams: {
+          'type': 'square_button',
+          'iconName': iconName,
+          'label': label,
+        },
+        creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: (id) {
+          final channel = MethodChannel('com.zenzer0s.kite/expressive_$id');
+          channel.setMethodCallHandler((call) async {
+            if (call.method == 'onAction' && call.arguments == 'click') {
+              onTap?.call();
+            }
+          });
+        },
+      ),
+    );
   }
 }
 

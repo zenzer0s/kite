@@ -32,12 +32,13 @@ class DownloadService : Service() {
         val pausedTaskIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
         val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         
-        fun startDownload(context: Context, taskId: String, url: String, audioOnly: Boolean, formatId: String?, outputDir: String) {
+        fun startDownload(context: Context, taskId: String, url: String, audioOnly: Boolean, formatId: String?, quality: String?, outputDir: String) {
             val intent = Intent(context, DownloadService::class.java).apply {
                 putExtra("taskId", taskId)
                 putExtra("url", url)
                 putExtra("audioOnly", audioOnly)
                 putExtra("formatId", formatId)
+                putExtra("quality", quality)
                 putExtra("outputDir", outputDir)
             }
             context.startForegroundService(intent)
@@ -51,6 +52,7 @@ class DownloadService : Service() {
         val url = intent.getStringExtra("url") ?: return START_NOT_STICKY
         val audioOnly = intent.getBooleanExtra("audioOnly", false)
         val formatId = intent.getStringExtra("formatId")
+        val quality = intent.getStringExtra("quality")
         var outputDir = intent.getStringExtra("outputDir")
         if (outputDir.isNullOrBlank()) {
             outputDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kite").absolutePath
@@ -156,7 +158,8 @@ class DownloadService : Service() {
                                     "thumbnail" to thumbnail,
                                     "url" to url,
                                     "duration" to duration,
-                                    "ext" to ext
+                                    "ext" to ext,
+                                    "quality" to quality
                                 ))
                             }
                         }
@@ -173,13 +176,16 @@ class DownloadService : Service() {
                     val filePath = KiteNative.getSafeFilePath(targetDir, title, ext)
                     
                     // Always save natively to history.
-                    val meta = KiteNative.DownloadMetadata(title, uploader, url, thumbnail, filePath, ext, duration)
+                    val meta = KiteNative.DownloadMetadata(title, uploader, url, thumbnail, filePath, ext, duration, quality)
                     KiteNative.saveToHistory(this@DownloadService, meta)
                     
                     // UI Sync
                     MainActivity.notifyHistoryChanged()
                     
-                    // Final Progress Emit (Done)
+                    // Trigger Telegram upload natively
+                    val uploaded = KiteNative.uploadToTelegram(this@DownloadService, filePath, ext)
+                    
+                    // Final Progress Emit (Done + Uploaded)
                     MainActivity.sharedScope.launch {
                         MainActivity.globalProgressSink?.success(mapOf(
                             "taskId" to taskId,
@@ -191,19 +197,12 @@ class DownloadService : Service() {
                             "thumbnail" to thumbnail,
                             "url" to url,
                             "duration" to duration,
-                            "ext" to ext
+                            "ext" to ext,
+                            "quality" to quality,
+                            "nativeUploaded" to uploaded
                         ))
                     }
-                    
-                    // Switch to Upload Icon
-                    builder.setContentText("Uploading to Telegram...")
-                    builder.setProgress(0, 0, true)
-                    builder.setSmallIcon(R.drawable.ic_upload)
-                    notificationManager.notify(notificationId, builder.build())
 
-                    // Trigger Telegram upload natively
-                    val uploaded = KiteNative.uploadToTelegram(this@DownloadService, filePath, ext)
-                    
                     // Fast Mode: Delete the temporary file ONLY if upload succeeded
                     if (fastMode && uploaded) {
                         try {
