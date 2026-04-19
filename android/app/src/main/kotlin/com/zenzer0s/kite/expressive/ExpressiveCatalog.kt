@@ -11,6 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
@@ -160,6 +166,230 @@ object ExpressiveCatalog {
                     maxLines = 1
                 )
             }
+        }
+    }
+
+    @Composable
+    fun QueueTaskCard(
+        title: String,
+        uploader: String,
+        thumbnail: String,
+        progress: Float?,
+        speed: String,
+        status: String,
+        targetExt: String,
+        quality: String?,
+        isCleaned: Boolean,
+        isDone: Boolean,
+        isCancelled: Boolean,
+        isError: Boolean,
+        isQueued: Boolean,
+        onAction: (String) -> Unit
+    ) {
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(28.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+        ) {
+            if (thumbnail.isNotEmpty()) {
+                coil.compose.AsyncImage(
+                    model = thumbnail,
+                    contentDescription = null,
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Rounded.Image,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    )
+                }
+            }
+
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.4f),
+                                Color.Black.copy(alpha = 0.85f)
+                            )
+                        )
+                    )
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Icon(
+                        imageVector = if (targetExt == "mp3") androidx.compose.material.icons.Icons.Rounded.PlayArrow else androidx.compose.material.icons.Icons.Rounded.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    
+                    val qualityLabel = if (status == "error") "Failed" else quality ?: if (targetExt == "mp3") "Best Audio" else "Best Video"
+                    InfoChip(
+                        iconName = if (targetExt == "mp3") "music" else "video",
+                        label = qualityLabel
+                    )
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Main Controls
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp, lineHeight = 20.sp)
+                        )
+                        Text(
+                            text = uploader,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color.White.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    val mainIcon = when {
+                        isDone && isCleaned -> "cloud"
+                        isDone -> "play"
+                        isCancelled || isError || isQueued -> "x"
+                        else -> "stop"
+                    }
+                    val mainAction = when {
+                        isDone && isCleaned -> "show_telegram"
+                        isDone -> "open_file"
+                        isCancelled || isError || isQueued -> "dismiss"
+                        else -> "cancel"
+                    }
+                    
+                    ActionButton(iconName = mainIcon) {
+                        onAction(mainAction)
+                    }
+                }
+
+                if (!isDone && !isCancelled && !isError) {
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    // Footer
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val progressInt = ((progress ?: 0f) * 100).toInt()
+                        Text(
+                            text = "$progressInt%",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f).height(16.dp)) {
+                            LinearWavyProgress(progress)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = speed,
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun InfoChip(iconName: String, label: String? = null) {
+        val icon = when (iconName) {
+            "music" -> androidx.compose.material.icons.Icons.Rounded.PlayArrow
+            "video" -> androidx.compose.material.icons.Icons.Rounded.PlayArrow
+            else -> null
+        }
+        val modifier = if (label == null) {
+            Modifier.size(32.dp)
+        } else {
+            Modifier.height(28.dp).padding(horizontal = 10.dp)
+        }
+
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(20.dp))
+                .then(modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
+                if (label != null) {
+                    if (icon != null) Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = label,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun ActionButton(iconName: String, onClick: () -> Unit) {
+        val icon = when (iconName) {
+            "play" -> androidx.compose.material.icons.Icons.Rounded.PlayArrow
+            "stop" -> androidx.compose.material.icons.Icons.Rounded.Stop
+            "x" -> androidx.compose.material.icons.Icons.Rounded.Close
+            "cloud" -> androidx.compose.material.icons.Icons.Rounded.Cloud
+            else -> androidx.compose.material.icons.Icons.Rounded.PlayArrow
+        }
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onPrimary
+            )
         }
     }
 }

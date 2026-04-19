@@ -29,24 +29,22 @@ internal class ExpressiveView(
     private val type = creationParams?.get("type") as? String ?: "loading"
     private val channel = MethodChannel(messenger, "com.zenzer0s.kite/expressive_$id")
     
-    private var currentProgress = androidx.compose.runtime.mutableStateOf<Float?>(
-        (creationParams?.get("progress") as? Number)?.toFloat()
-    )
-    private var currentLabel = androidx.compose.runtime.mutableStateOf<String?>(
-        creationParams?.get("label") as? String
-    )
+    private var currentParams = androidx.compose.runtime.mutableStateOf<Map<String, Any?>?>(creationParams)
 
     init {
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "updateProgress" -> {
-                    currentProgress.value = (call.arguments as? Number)?.toFloat()
+                    val newParams = currentParams.value?.toMutableMap() ?: mutableMapOf()
+                    newParams["progress"] = (call.arguments as? Number)?.toFloat()
+                    currentParams.value = newParams
                     result.success(null)
                 }
                 "updateParams" -> {
                     val args = call.arguments as? Map<String, Any?>
-                    currentProgress.value = (args?.get("progress") as? Number)?.toFloat()
-                    currentLabel.value = args?.get("label") as? String
+                    val newParams = currentParams.value?.toMutableMap() ?: mutableMapOf()
+                    args?.let { newParams.putAll(it) }
+                    currentParams.value = newParams
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -77,13 +75,14 @@ internal class ExpressiveView(
                 else -> lightColorScheme()
             }
             MaterialTheme(colorScheme = colorScheme) {
-                val progress = currentProgress.value
-                val label = currentLabel.value
+                val params = currentParams.value
+                val progress = (params?.get("progress") as? Number)?.toFloat()
+                val label = params?.get("label") as? String
 
                 when (type) {
                     "loading" -> ExpressiveCatalog.LoadingIndicator()
                     "quick_actions" -> {
-                        val hasThumbnail = creationParams?.get("hasThumbnail") as? Boolean ?: false
+                        val hasThumbnail = params?.get("hasThumbnail") as? Boolean ?: false
                         ExpressiveCatalog.QuickActions(hasThumbnail) { action ->
                             channel.invokeMethod("onAction", action)
                         }
@@ -92,10 +91,29 @@ internal class ExpressiveView(
                         ExpressiveCatalog.LinearWavyProgress(progress)
                     }
                     "square_button" -> {
-                        val iconName = creationParams?.get("iconName") as? String
+                        val iconName = params?.get("iconName") as? String
                         ExpressiveCatalog.SquareButton(label, iconName) {
                             android.util.Log.d("ExpressiveView", "Button clicked: $type $iconName")
                             channel.invokeMethod("onAction", "click")
+                        }
+                    }
+                    "queue_task_card" -> {
+                        ExpressiveCatalog.QueueTaskCard(
+                            title = params?.get("title") as? String ?: "",
+                            uploader = params?.get("uploader") as? String ?: "",
+                            thumbnail = params?.get("thumbnail") as? String ?: "",
+                            progress = progress,
+                            speed = params?.get("speed") as? String ?: "",
+                            status = params?.get("status") as? String ?: "",
+                            targetExt = params?.get("targetExt") as? String ?: "",
+                            quality = params?.get("quality") as? String,
+                            isCleaned = params?.get("isCleaned") as? Boolean ?: false,
+                            isDone = params?.get("isDone") as? Boolean ?: false,
+                            isCancelled = params?.get("isCancelled") as? Boolean ?: false,
+                            isError = params?.get("isError") as? Boolean ?: false,
+                            isQueued = params?.get("isQueued") as? Boolean ?: false
+                        ) { action ->
+                            channel.invokeMethod("onAction", action)
                         }
                     }
                 }
