@@ -211,8 +211,9 @@ open class MainActivity : FlutterFragmentActivity() {
                         val formatId = call.argument<String>("formatId")
                         val outputDir = call.argument<String>("outputDir")
                             ?: File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Kite").absolutePath
+                        val passedTaskId = call.argument<String>("taskId")
 
-                        val taskId = "T-${System.currentTimeMillis()}-${(100..999).random()}"
+                        val taskId = passedTaskId ?: "T-${System.currentTimeMillis()}-${(100..999).random()}"
                         DownloadService.startDownload(applicationContext, taskId, url, audioOnly, formatId, outputDir)
                         result.success(taskId)
                     }

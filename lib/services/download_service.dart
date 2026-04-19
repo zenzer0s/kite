@@ -102,6 +102,7 @@ class DownloadProgress {
   final int? duration;
   final String? ext;
   final bool nativeUploaded;
+  final String? filePath;
 
   const DownloadProgress({
     required this.taskId,
@@ -116,6 +117,7 @@ class DownloadProgress {
     this.duration,
     this.ext,
     this.nativeUploaded = false,
+    this.filePath,
   });
 
   factory DownloadProgress.fromMap(Map map) => DownloadProgress(
@@ -131,6 +133,7 @@ class DownloadProgress {
     duration: (map['duration'] as num?)?.toInt(),
     ext: map['ext'] as String?,
     nativeUploaded: map['nativeUploaded'] == true,
+    filePath: map['filePath'] as String?,
   );
 }
 
@@ -170,14 +173,16 @@ class DownloadService {
     required bool audioOnly,
     String? formatId,
     String? outputDir,
+    String? taskId,
   }) async {
-    final taskId = await _method.invokeMethod<String>('startDownload', {
+    final id = await _method.invokeMethod<String>('startDownload', {
       'url': url,
       'audioOnly': audioOnly,
       'formatId': formatId,
       'outputDir': outputDir,
+      'taskId': taskId,
     });
-    return taskId!;
+    return id!;
   }
 
   static Future<void> cancelDownload(String taskId) async {

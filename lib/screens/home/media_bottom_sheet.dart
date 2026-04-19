@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -207,17 +208,22 @@ class _DataState extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     child: Stack(
                       children: [
-                        Image.network(
-                          info.thumbnail,
+                        CachedNetworkImage(
+                          imageUrl: info.thumbnail,
                           width: 110,
                           height: 72,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                width: 110,
-                                height: 72,
-                                color: context.zc.surfaceAlt,
-                              ),
+                          memCacheWidth: 220, // Optimized for 110 width
+                          placeholder: (context, url) => Container(
+                            width: 110,
+                            height: 72,
+                            color: context.zc.surfaceAlt,
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: 110,
+                            height: 72,
+                            color: context.zc.surfaceAlt,
+                          ),
                         ),
                         if (info.duration > 0)
                           Positioned(

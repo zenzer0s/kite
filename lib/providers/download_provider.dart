@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/download_service.dart';
 import 'database_provider.dart';
 
-enum DownloadStatus { idle, fetching, downloading, paused, done, error }
+enum DownloadStatus { idle, fetching, queued, downloading, paused, done, error, cancelled }
 
 class DownloadState {
   final DownloadStatus status;
@@ -83,6 +83,7 @@ class DownloadTask {
   final String? errorMessage;
   final String? targetExt;
   final String outputDir;
+  final String? filePath;
 
   const DownloadTask({
     required this.taskId,
@@ -93,6 +94,7 @@ class DownloadTask {
     this.errorMessage,
     this.targetExt,
     this.outputDir = '/storage/emulated/0/Download/Kite',
+    this.filePath,
   });
 
   DownloadTask copyWith({
@@ -100,6 +102,7 @@ class DownloadTask {
     double? progress,
     String? currentLine,
     String? errorMessage,
+    String? filePath,
   }) => DownloadTask(
     taskId: taskId,
     info: info,
@@ -109,6 +112,7 @@ class DownloadTask {
     errorMessage: errorMessage ?? this.errorMessage,
     targetExt: targetExt,
     outputDir: outputDir,
+    filePath: filePath ?? this.filePath,
   );
 }
 
@@ -168,7 +172,11 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
         if (currentTask != null && currentTask.status != DownloadStatus.error) {
           _update(
             p.taskId,
-            currentTask.copyWith(status: DownloadStatus.done, progress: 100),
+            currentTask.copyWith(
+              status: DownloadStatus.done,
+              progress: 100,
+              filePath: p.filePath,
+            ),
           );
         }
       } else {
@@ -194,18 +202,23 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
     String? formatId,
   }) async {
     try {
-      final taskId = await DownloadService.startDownload(
-        url: info.url,
-        audioOnly: audioOnly,
-        formatId: formatId,
-      );
+      final taskId = 'T-${DateTime.now().millisecondsSinceEpoch}-${(100 + (900 * (DateTime.now().microsecond / 1000000))).toInt()}';
       final task = DownloadTask(
         taskId: taskId,
         info: info,
-        status: DownloadStatus.downloading,
+        status: DownloadStatus.queued, // Show it's queued instantly
         targetExt: audioOnly ? 'mp3' : 'mp4',
       );
+      
+      // Update state instantly!
       state = {...state, taskId: task};
+
+      await DownloadService.startDownload(
+        url: info.url,
+        audioOnly: audioOnly,
+        formatId: formatId,
+        taskId: taskId,
+      );
     } catch (e) {
       final errorTaskId = 'error_${DateTime.now().millisecondsSinceEpoch}';
       state = {
@@ -221,11 +234,11 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
   }
 
   Future<void> cancelTask(String taskId) async {
+    final task = state[taskId];
+    if (task == null) return;
     _savedTaskIds.remove(taskId);
     await DownloadService.cancelDownload(taskId);
-    final updated = Map<String, DownloadTask>.from(state);
-    updated.remove(taskId);
-    state = updated;
+    _update(taskId, task.copyWith(status: DownloadStatus.cancelled));
   }
 
   Future<void> pauseTask(String taskId) async {
@@ -245,6 +258,18 @@ class DownloadsNotifier extends Notifier<Map<String, DownloadTask>> {
   void dismissTask(String taskId) {
     final updated = Map<String, DownloadTask>.from(state);
     updated.remove(taskId);
+    state = updated;
+  }
+
+  void clearCancelled() {
+    final updated = Map<String, DownloadTask>.from(state);
+    updated.removeWhere((_, task) => task.status == DownloadStatus.cancelled);
+    state = updated;
+  }
+
+  void clearErrored() {
+    final updated = Map<String, DownloadTask>.from(state);
+    updated.removeWhere((_, task) => task.status == DownloadStatus.error);
     state = updated;
   }
 }

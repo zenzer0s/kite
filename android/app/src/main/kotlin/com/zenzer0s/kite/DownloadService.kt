@@ -179,6 +179,22 @@ class DownloadService : Service() {
                     // UI Sync
                     MainActivity.notifyHistoryChanged()
                     
+                    // Final Progress Emit (Done)
+                    MainActivity.sharedScope.launch {
+                        MainActivity.globalProgressSink?.success(mapOf(
+                            "taskId" to taskId,
+                            "progress" to 100.0,
+                            "done" to true,
+                            "filePath" to filePath,
+                            "title" to title,
+                            "uploader" to uploader,
+                            "thumbnail" to thumbnail,
+                            "url" to url,
+                            "duration" to duration,
+                            "ext" to ext
+                        ))
+                    }
+                    
                     // Switch to Upload Icon
                     builder.setContentText("Uploading to Telegram...")
                     builder.setProgress(0, 0, true)
