@@ -46,3 +46,4 @@ app.*.map.json
 old_projects
 example
 /android/build/
+scripts/
