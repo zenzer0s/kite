@@ -45,3 +45,4 @@ app.*.map.json
 /android/app/release
 old_projects
 example
+/android/build/
